@@ -1,0 +1,12 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 720 220">
+  <rect width="720" height="220" rx="34" fill="#F4EADB"/>
+  <g transform="translate(36 34)" fill="none" stroke="#123047" stroke-width="10" stroke-linecap="round" stroke-linejoin="round">
+    <path d="M12 78 78 22l66 56v68H12Z"/>
+    <path d="M49 146V91h58v55"/>
+    <path d="M39 119c23-16 55-16 78 0"/>
+    <circle cx="78" cy="89" r="8" fill="#D98162" stroke="none"/>
+  </g>
+  <text x="220" y="106" font-family="Georgia, serif" font-size="72" font-weight="700" fill="#123047">Cap Serein</text>
+  <text x="604" y="86" font-family="Arial, sans-serif" font-size="28" font-weight="800" fill="#D98162">83</text>
+  <text x="224" y="148" font-family="Arial, sans-serif" font-size="21" font-weight="700" letter-spacing="3" fill="#4B8D86">INTENDANCE LOCATIVE</text>
+</svg>

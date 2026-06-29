@@ -10,6 +10,10 @@ import {
   useState,
 } from "react";
 
+import ValidationSignatures, {
+  type DonneesValidation,
+} from "@/components/etats-des-lieux/ValidationSignatures";
+import ActionsPdf from "@/components/etats-des-lieux/ActionsPdf";
 import { lire } from "@/lib/database";
 
 type StatutEtatDesLieux =
@@ -96,12 +100,7 @@ type EtatDesLieux = {
 
   zones: ZoneEtatDesLieux[];
 
-  validation: {
-    nomOperateur: string;
-    nomVoyageur: string;
-    accordVoyageur: boolean;
-    observationsFinales: string;
-  };
+  validation: DonneesValidation;
 
   dateDebut: string;
   dateFin: string;
@@ -368,28 +367,32 @@ function normaliserPhoto(
     return null;
   }
 
-  const source =
-    photo.source === "camera"
-      ? "camera"
-      : "galerie";
-
   return {
     id:
       texte(photo.id) ||
       creerIdentifiant("photo"),
+
     dataUrl,
+
     nom:
       texte(photo.nom) ||
       texte(photo.name) ||
       "Photo",
+
     annotation:
       texte(photo.annotation) ||
       texte(photo.commentaire),
+
     dateAjout:
       texte(photo.dateAjout) ||
       texte(photo.date) ||
       new Date().toISOString(),
-    source,
+
+    source:
+      photo.source === "camera"
+        ? "camera"
+        : "galerie",
+
     tailleOriginale: nombre(
       photo.tailleOriginale
     ),
@@ -409,7 +412,6 @@ function normaliserZones(
   const zones = valeur
     .map((element): ZoneEtatDesLieux | null => {
       const zone = objet(element);
-
       const nom = texte(zone.nom).trim();
 
       if (!nom) {
@@ -431,13 +433,17 @@ function normaliserZones(
         id:
           texte(zone.id) ||
           creerIdentifiant("zone"),
+
         nom,
+
         etat: normaliserEtatZone(
           zone.etat
         ),
+
         observations: texte(
           zone.observations
         ),
+
         photos,
       };
     })
@@ -448,13 +454,52 @@ function normaliserZones(
         zone !== null
     );
 
-  if (zones.length === 0) {
-    return creerZonesParDefaut(
-      nombreChambres
-    );
-  }
+  return zones.length > 0
+    ? zones
+    : creerZonesParDefaut(
+        nombreChambres
+      );
+}
 
-  return zones;
+function creerValidation(
+  valeur: unknown,
+  voyageurNom: string
+): DonneesValidation {
+  const validation = objet(valeur);
+
+  return {
+    nomOperateur: texte(
+      validation.nomOperateur
+    ),
+
+    nomVoyageur:
+      texte(validation.nomVoyageur) ||
+      voyageurNom,
+
+    accordVoyageur: Boolean(
+      validation.accordVoyageur
+    ),
+
+    observationsFinales: texte(
+      validation.observationsFinales
+    ),
+
+    signatureVoyageur: texte(
+      validation.signatureVoyageur
+    ),
+
+    signatureOperateur: texte(
+      validation.signatureOperateur
+    ),
+
+    dateSignatureVoyageur: texte(
+      validation.dateSignatureVoyageur
+    ),
+
+    dateSignatureOperateur: texte(
+      validation.dateSignatureOperateur
+    ),
+  };
 }
 
 function normaliserEtatDesLieux(
@@ -464,11 +509,16 @@ function normaliserEtatDesLieux(
 ): EtatDesLieux {
   const compteurs = objet(brut.compteurs);
   const cles = objet(brut.cles);
-  const validation = objet(brut.validation);
 
   const nombreChambres =
     nombre(brut.nombreChambres) ||
     nombre(logement?.nombreChambres);
+
+  const voyageurNom =
+    texte(brut.voyageurNom) ||
+    (voyageur
+      ? nomCompletVoyageur(voyageur)
+      : "Voyageur non renseigné");
 
   return {
     ...brut,
@@ -507,11 +557,7 @@ function normaliserEtatDesLieux(
 
     voyageurId: texte(brut.voyageurId),
 
-    voyageurNom:
-      texte(brut.voyageurNom) ||
-      (voyageur
-        ? nomCompletVoyageur(voyageur)
-        : "Voyageur non renseigné"),
+    voyageurNom,
 
     voyageurTelephone:
       texte(brut.voyageurTelephone) ||
@@ -555,12 +601,15 @@ function normaliserEtatDesLieux(
       electricite: creerReleve(
         compteurs.electricite
       ),
+
       eauFroide: creerReleve(
         compteurs.eauFroide
       ),
+
       eauChaude: creerReleve(
         compteurs.eauChaude
       ),
+
       gaz: creerReleve(compteurs.gaz),
     },
 
@@ -568,12 +617,15 @@ function normaliserEtatDesLieux(
       nombreJeux: nombre(
         cles.nombreJeux
       ),
+
       nombreBadges: nombre(
         cles.nombreBadges
       ),
+
       nombreTelecommandes: nombre(
         cles.nombreTelecommandes
       ),
+
       observations: texte(
         cles.observations
       ),
@@ -584,25 +636,14 @@ function normaliserEtatDesLieux(
       nombreChambres
     ),
 
-    validation: {
-      nomOperateur: texte(
-        validation.nomOperateur
-      ),
-      nomVoyageur:
-        texte(validation.nomVoyageur) ||
-        texte(brut.voyageurNom) ||
-        voyageur?.nomComplet ||
-        "",
-      accordVoyageur: Boolean(
-        validation.accordVoyageur
-      ),
-      observationsFinales: texte(
-        validation.observationsFinales
-      ),
-    },
+    validation: creerValidation(
+      brut.validation,
+      voyageurNom
+    ),
 
     dateDebut: texte(brut.dateDebut),
     dateFin: texte(brut.dateFin),
+
     dateSignature: texte(
       brut.dateSignature
     ),
@@ -835,6 +876,11 @@ export default function FicheEtatDesLieuxPage() {
   ] = useState("");
 
   const [
+    erreurValidation,
+    setErreurValidation,
+  ] = useState("");
+
+  const [
     nouveauNomZone,
     setNouveauNomZone,
   ] = useState("");
@@ -847,21 +893,27 @@ export default function FicheEtatDesLieuxPage() {
         (logement): Logement => ({
           id: texte(logement.id),
           nom: texte(logement.nom),
+
           typeLogement: texte(
             logement.typeLogement
           ),
+
           superficie: nombre(
             logement.superficie
           ),
+
           nombreChambres: nombre(
             logement.nombreChambres
           ),
+
           adresse: texte(
             logement.adresse
           ),
+
           codePostal: texte(
             logement.codePostal
           ),
+
           ville: texte(logement.ville),
         })
       );
@@ -873,16 +925,20 @@ export default function FicheEtatDesLieuxPage() {
         (voyageur): Voyageur => ({
           id: texte(voyageur.id),
           nom: texte(voyageur.nom),
+
           prenom: texte(
             voyageur.prenom
           ),
+
           nomComplet:
             nomCompletVoyageur(
               voyageur
             ),
+
           telephone: texte(
             voyageur.telephone
           ),
+
           email: texte(
             voyageur.email
           ),
@@ -985,7 +1041,7 @@ export default function FicheEtatDesLieuxPage() {
           setErreurSauvegarde("");
         } catch {
           setErreurSauvegarde(
-            "La sauvegarde locale est pleine. Supprimez quelques photos ou poursuivez après la connexion au stockage en ligne."
+            "La sauvegarde locale est pleine. Supprimez quelques photos avant de poursuivre."
           );
         }
       },
@@ -1049,6 +1105,18 @@ export default function FicheEtatDesLieuxPage() {
     );
   }
 
+  function validationComplete(
+    validation: DonneesValidation
+  ): boolean {
+    return Boolean(
+      validation.nomVoyageur.trim() &&
+        validation.nomOperateur.trim() &&
+        validation.signatureVoyageur &&
+        validation.signatureOperateur &&
+        validation.accordVoyageur
+    );
+  }
+
   function changerStatut(
     statut: StatutEtatDesLieux
   ) {
@@ -1089,6 +1157,63 @@ export default function FicheEtatDesLieuxPage() {
     modifierEtat(modification);
   }
 
+  function validerEtSigner() {
+    if (!etat) return;
+
+    if (
+      !etat.validation.nomVoyageur.trim()
+    ) {
+      setErreurValidation(
+        "Le nom du voyageur est obligatoire."
+      );
+      setEtapeActive("validation");
+      return;
+    }
+
+    if (
+      !etat.validation.nomOperateur.trim()
+    ) {
+      setErreurValidation(
+        "Le nom de l’opérateur est obligatoire."
+      );
+      setEtapeActive("validation");
+      return;
+    }
+
+    if (
+      !etat.validation.signatureVoyageur
+    ) {
+      setErreurValidation(
+        "La signature du voyageur est obligatoire."
+      );
+      setEtapeActive("validation");
+      return;
+    }
+
+    if (
+      !etat.validation.signatureOperateur
+    ) {
+      setErreurValidation(
+        "La signature de l’opérateur est obligatoire."
+      );
+      setEtapeActive("validation");
+      return;
+    }
+
+    if (
+      !etat.validation.accordVoyageur
+    ) {
+      setErreurValidation(
+        "Le voyageur doit confirmer avoir pris connaissance de l’état des lieux."
+      );
+      setEtapeActive("validation");
+      return;
+    }
+
+    setErreurValidation("");
+    changerStatut("signe");
+  }
+
   function actionPrincipale() {
     if (!etat) return;
 
@@ -1105,7 +1230,7 @@ export default function FicheEtatDesLieuxPage() {
     }
 
     if (etat.statut === "termine") {
-      changerStatut("signe");
+      validerEtSigner();
     }
   }
 
@@ -1185,13 +1310,18 @@ export default function FicheEtatDesLieuxPage() {
         nouvellesPhotos.push({
           id: creerIdentifiant("photo"),
           dataUrl,
+
           nom:
             fichier.name ||
             "Photo état des lieux",
+
           annotation: "",
+
           dateAjout:
             new Date().toISOString(),
+
           source,
+
           tailleOriginale:
             fichier.size,
         });
@@ -1266,6 +1396,7 @@ export default function FicheEtatDesLieuxPage() {
         zone.id === zoneId
           ? {
               ...zone,
+
               photos: zone.photos.filter(
                 (photo) =>
                   photo.id !== photoId
@@ -1365,8 +1496,7 @@ export default function FicheEtatDesLieuxPage() {
           <div className="mx-auto h-12 w-12 animate-spin rounded-full border-4 border-slate-200 border-t-blue-600" />
 
           <p className="mt-4 font-bold text-slate-500">
-            Chargement de l’état des
-            lieux...
+            Chargement de l’état des lieux...
           </p>
         </div>
       </div>
@@ -1405,8 +1535,11 @@ export default function FicheEtatDesLieuxPage() {
       : etat.statut === "en_cours"
         ? "✓ Terminer l’état des lieux"
         : etat.statut === "termine"
-          ? "✍ Marquer comme signé"
-          : "État des lieux signé";
+          ? "✍ Valider les signatures"
+          : "✓ État des lieux signé";
+
+  const peutSigner =
+    validationComplete(etat.validation);
 
   return (
     <div className="space-y-5 sm:space-y-7">
@@ -1574,8 +1707,11 @@ export default function FicheEtatDesLieuxPage() {
                       event.target.value,
                   })
                 }
+                disabled={
+                  etat.statut === "signe"
+                }
                 placeholder="Consignes du propriétaire, éléments à contrôler, accès au logement..."
-                className="w-full rounded-2xl border border-slate-300 bg-white px-5 py-4 text-slate-900 outline-none placeholder:text-slate-400 focus:border-blue-600 focus:ring-4 focus:ring-blue-100"
+                className="w-full rounded-2xl border border-slate-300 bg-white px-5 py-4 text-slate-900 outline-none placeholder:text-slate-400 focus:border-blue-600 focus:ring-4 focus:ring-blue-100 disabled:bg-slate-100"
               />
             </label>
           </Bloc>
@@ -1588,6 +1724,9 @@ export default function FicheEtatDesLieuxPage() {
               <SelectionEtat
                 label="État général"
                 value={etat.etatGeneral}
+                disabled={
+                  etat.statut === "signe"
+                }
                 onChange={(valeur) =>
                   modifierEtat({
                     etatGeneral: valeur,
@@ -1598,6 +1737,9 @@ export default function FicheEtatDesLieuxPage() {
               <SelectionEtat
                 label="Propreté générale"
                 value={etat.proprete}
+                disabled={
+                  etat.statut === "signe"
+                }
                 onChange={(valeur) =>
                   modifierEtat({
                     proprete: valeur,
@@ -1622,8 +1764,11 @@ export default function FicheEtatDesLieuxPage() {
                       event.target.value,
                   })
                 }
+                disabled={
+                  etat.statut === "signe"
+                }
                 placeholder="État global du logement, propreté, odeurs, dommages généraux..."
-                className="w-full rounded-2xl border border-slate-300 bg-white px-5 py-4 text-slate-900 outline-none placeholder:text-slate-400 focus:border-blue-600 focus:ring-4 focus:ring-blue-100"
+                className="w-full rounded-2xl border border-slate-300 bg-white px-5 py-4 text-slate-900 outline-none placeholder:text-slate-400 focus:border-blue-600 focus:ring-4 focus:ring-blue-100 disabled:bg-slate-100"
               />
             </label>
           </Bloc>
@@ -1644,6 +1789,9 @@ export default function FicheEtatDesLieuxPage() {
                   etat.compteurs
                     .electricite
                 }
+                disabled={
+                  etat.statut === "signe"
+                }
                 onChange={(champ, valeur) =>
                   mettreAJourCompteur(
                     "electricite",
@@ -1659,6 +1807,9 @@ export default function FicheEtatDesLieuxPage() {
                 releve={
                   etat.compteurs
                     .eauFroide
+                }
+                disabled={
+                  etat.statut === "signe"
                 }
                 onChange={(champ, valeur) =>
                   mettreAJourCompteur(
@@ -1676,6 +1827,9 @@ export default function FicheEtatDesLieuxPage() {
                   etat.compteurs
                     .eauChaude
                 }
+                disabled={
+                  etat.statut === "signe"
+                }
                 onChange={(champ, valeur) =>
                   mettreAJourCompteur(
                     "eauChaude",
@@ -1690,6 +1844,9 @@ export default function FicheEtatDesLieuxPage() {
                 icone="🔥"
                 releve={
                   etat.compteurs.gaz
+                }
+                disabled={
+                  etat.statut === "signe"
                 }
                 onChange={(champ, valeur) =>
                   mettreAJourCompteur(
@@ -1712,6 +1869,9 @@ export default function FicheEtatDesLieuxPage() {
                 value={
                   etat.cles.nombreJeux
                 }
+                disabled={
+                  etat.statut === "signe"
+                }
                 onChange={(valeur) =>
                   modifierEtat({
                     cles: {
@@ -1726,6 +1886,9 @@ export default function FicheEtatDesLieuxPage() {
                 label="Badges"
                 value={
                   etat.cles.nombreBadges
+                }
+                disabled={
+                  etat.statut === "signe"
                 }
                 onChange={(valeur) =>
                   modifierEtat({
@@ -1743,6 +1906,9 @@ export default function FicheEtatDesLieuxPage() {
                 value={
                   etat.cles
                     .nombreTelecommandes
+                }
+                disabled={
+                  etat.statut === "signe"
                 }
                 onChange={(valeur) =>
                   modifierEtat({
@@ -1766,6 +1932,9 @@ export default function FicheEtatDesLieuxPage() {
                 value={
                   etat.cles.observations
                 }
+                disabled={
+                  etat.statut === "signe"
+                }
                 onChange={(event) =>
                   modifierEtat({
                     cles: {
@@ -1776,7 +1945,7 @@ export default function FicheEtatDesLieuxPage() {
                   })
                 }
                 placeholder="Clé de portail, badge de parking, télécommande de garage..."
-                className="w-full rounded-2xl border border-slate-300 bg-white px-5 py-4 text-slate-900 outline-none placeholder:text-slate-400 focus:border-blue-600 focus:ring-4 focus:ring-blue-100"
+                className="w-full rounded-2xl border border-slate-300 bg-white px-5 py-4 text-slate-900 outline-none placeholder:text-slate-400 focus:border-blue-600 focus:ring-4 focus:ring-blue-100 disabled:bg-slate-100"
               />
             </label>
           </Bloc>
@@ -1789,8 +1958,7 @@ export default function FicheEtatDesLieuxPage() {
             <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
               <div>
                 <h2 className="text-xl font-black text-blue-950">
-                  Photos de l’état des
-                  lieux
+                  Photos de l’état des lieux
                 </h2>
 
                 <p className="mt-2 text-sm leading-6 text-blue-800">
@@ -1807,15 +1975,6 @@ export default function FicheEtatDesLieuxPage() {
                 </div>
               )}
             </div>
-
-            <p className="mt-4 text-xs leading-5 text-blue-700">
-              Les photos sont compressées
-              automatiquement. Pour le moment,
-              elles restent enregistrées dans
-              ce navigateur. Le stockage en
-              ligne sera ajouté à l’étape
-              suivante.
-            </p>
           </div>
 
           {erreurPhoto && (
@@ -1830,21 +1989,26 @@ export default function FicheEtatDesLieuxPage() {
               titre={zone.nom}
               description={`${zone.photos.length} photo(s)`}
               action={
-                <button
-                  type="button"
-                  onClick={() =>
-                    supprimerZone(zone)
-                  }
-                  className="min-h-10 rounded-xl border border-red-200 bg-red-50 px-3 py-2 text-xs font-black text-red-700"
-                >
-                  Supprimer
-                </button>
+                etat.statut !== "signe" ? (
+                  <button
+                    type="button"
+                    onClick={() =>
+                      supprimerZone(zone)
+                    }
+                    className="min-h-10 rounded-xl border border-red-200 bg-red-50 px-3 py-2 text-xs font-black text-red-700"
+                  >
+                    Supprimer
+                  </button>
+                ) : null
               }
             >
               <div className="grid gap-5 md:grid-cols-2">
                 <SelectionEtat
-                  label={`État de la zone`}
+                  label="État de la zone"
                   value={zone.etat}
+                  disabled={
+                    etat.statut === "signe"
+                  }
                   onChange={(valeur) =>
                     mettreAJourZone(
                       zone.id,
@@ -1865,6 +2029,9 @@ export default function FicheEtatDesLieuxPage() {
                     value={
                       zone.observations
                     }
+                    disabled={
+                      etat.statut === "signe"
+                    }
                     onChange={(event) =>
                       mettreAJourZone(
                         zone.id,
@@ -1876,29 +2043,31 @@ export default function FicheEtatDesLieuxPage() {
                       )
                     }
                     placeholder="État, défauts, propreté..."
-                    className="min-h-12 w-full rounded-2xl border border-slate-300 bg-white px-5 py-3 text-slate-900 outline-none placeholder:text-slate-400 focus:border-blue-600 focus:ring-4 focus:ring-blue-100"
+                    className="min-h-12 w-full rounded-2xl border border-slate-300 bg-white px-5 py-3 text-slate-900 outline-none placeholder:text-slate-400 focus:border-blue-600 focus:ring-4 focus:ring-blue-100 disabled:bg-slate-100"
                   />
                 </label>
               </div>
 
-              <CapturePhotos
-                zoneId={zone.id}
-                disabled={traitementPhoto}
-                onCamera={(fichiers) =>
-                  ajouterPhotos(
-                    zone.id,
-                    fichiers,
-                    "camera"
-                  )
-                }
-                onGalerie={(fichiers) =>
-                  ajouterPhotos(
-                    zone.id,
-                    fichiers,
-                    "galerie"
-                  )
-                }
-              />
+              {etat.statut !== "signe" && (
+                <CapturePhotos
+                  zoneId={zone.id}
+                  disabled={traitementPhoto}
+                  onCamera={(fichiers) =>
+                    ajouterPhotos(
+                      zone.id,
+                      fichiers,
+                      "camera"
+                    )
+                  }
+                  onGalerie={(fichiers) =>
+                    ajouterPhotos(
+                      zone.id,
+                      fichiers,
+                      "galerie"
+                    )
+                  }
+                />
+              )}
 
               {zone.photos.length > 0 && (
                 <div className="mt-6 grid gap-4 sm:grid-cols-2 xl:grid-cols-3">
@@ -1931,18 +2100,21 @@ export default function FicheEtatDesLieuxPage() {
                                 : "🖼️ Galerie"}
                             </span>
 
-                            <button
-                              type="button"
-                              onClick={() =>
-                                supprimerPhoto(
-                                  zone.id,
-                                  photo.id
-                                )
-                              }
-                              className="min-h-10 rounded-xl bg-red-50 px-3 text-xs font-black text-red-700"
-                            >
-                              Supprimer
-                            </button>
+                            {etat.statut !==
+                              "signe" && (
+                              <button
+                                type="button"
+                                onClick={() =>
+                                  supprimerPhoto(
+                                    zone.id,
+                                    photo.id
+                                  )
+                                }
+                                className="min-h-10 rounded-xl bg-red-50 px-3 text-xs font-black text-red-700"
+                              >
+                                Supprimer
+                              </button>
+                            )}
                           </div>
 
                           <label>
@@ -1955,6 +2127,10 @@ export default function FicheEtatDesLieuxPage() {
                               value={
                                 photo.annotation
                               }
+                              disabled={
+                                etat.statut ===
+                                "signe"
+                              }
                               onChange={(
                                 event
                               ) =>
@@ -1966,7 +2142,7 @@ export default function FicheEtatDesLieuxPage() {
                                 )
                               }
                               placeholder="Exemple : impact sur le mur à gauche de la fenêtre..."
-                              className="w-full rounded-2xl border border-slate-300 bg-white px-4 py-3 text-sm text-slate-900 outline-none placeholder:text-slate-400 focus:border-blue-600 focus:ring-4 focus:ring-blue-100"
+                              className="w-full rounded-2xl border border-slate-300 bg-white px-4 py-3 text-sm text-slate-900 outline-none placeholder:text-slate-400 focus:border-blue-600 focus:ring-4 focus:ring-blue-100 disabled:bg-slate-100"
                             />
                           </label>
                         </div>
@@ -1978,40 +2154,42 @@ export default function FicheEtatDesLieuxPage() {
             </Bloc>
           ))}
 
-          <Bloc
-            titre="Ajouter une zone"
-            description="Ajoutez une pièce ou un équipement qui n’apparaît pas dans la liste."
-          >
-            <div className="flex flex-col gap-3 sm:flex-row">
-              <input
-                type="text"
-                value={nouveauNomZone}
-                onChange={(event) =>
-                  setNouveauNomZone(
-                    event.target.value
-                  )
-                }
-                onKeyDown={(event) => {
-                  if (
-                    event.key === "Enter"
-                  ) {
-                    event.preventDefault();
-                    ajouterZone();
+          {etat.statut !== "signe" && (
+            <Bloc
+              titre="Ajouter une zone"
+              description="Ajoutez une pièce ou un équipement qui n’apparaît pas dans la liste."
+            >
+              <div className="flex flex-col gap-3 sm:flex-row">
+                <input
+                  type="text"
+                  value={nouveauNomZone}
+                  onChange={(event) =>
+                    setNouveauNomZone(
+                      event.target.value
+                    )
                   }
-                }}
-                placeholder="Exemple : Balcon, Garage, Buanderie..."
-                className="min-h-12 min-w-0 flex-1 rounded-2xl border border-slate-300 bg-white px-5 py-3 text-slate-900 outline-none placeholder:text-slate-400 focus:border-blue-600 focus:ring-4 focus:ring-blue-100"
-              />
+                  onKeyDown={(event) => {
+                    if (
+                      event.key === "Enter"
+                    ) {
+                      event.preventDefault();
+                      ajouterZone();
+                    }
+                  }}
+                  placeholder="Exemple : Balcon, Garage, Buanderie..."
+                  className="min-h-12 min-w-0 flex-1 rounded-2xl border border-slate-300 bg-white px-5 py-3 text-slate-900 outline-none placeholder:text-slate-400 focus:border-blue-600 focus:ring-4 focus:ring-blue-100"
+                />
 
-              <button
-                type="button"
-                onClick={ajouterZone}
-                className="min-h-12 rounded-2xl bg-slate-900 px-6 py-3 font-black text-white"
-              >
-                + Ajouter la zone
-              </button>
-            </div>
-          </Bloc>
+                <button
+                  type="button"
+                  onClick={ajouterZone}
+                  className="min-h-12 rounded-2xl bg-slate-900 px-6 py-3 font-black text-white"
+                >
+                  + Ajouter la zone
+                </button>
+              </div>
+            </Bloc>
+          )}
         </div>
       )}
 
@@ -2019,7 +2197,7 @@ export default function FicheEtatDesLieuxPage() {
         <div className="space-y-5">
           <Bloc
             titre="Récapitulatif"
-            description="Vérifiez les informations avant de terminer ou signer."
+            description="Vérifiez les informations avant de signer."
           >
             <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
               <CarteRecap
@@ -2049,99 +2227,31 @@ export default function FicheEtatDesLieuxPage() {
           </Bloc>
 
           <Bloc
-            titre="Validation de l’intervention"
-            description="Les signatures manuscrites et l’export PDF seront ajoutés après le stockage en ligne."
+            titre="Signatures de l’état des lieux"
+            description="Les signatures seront intégrées au futur document PDF."
           >
-            <div className="grid gap-5 md:grid-cols-2">
-              <ChampTexte
-                label="Nom de l’opérateur"
-                value={
-                  etat.validation
-                    .nomOperateur
-                }
-                placeholder="Nom de la personne réalisant l’état des lieux"
-                onChange={(valeur) =>
-                  modifierEtat({
-                    validation: {
-                      ...etat.validation,
-                      nomOperateur:
-                        valeur,
-                    },
-                  })
-                }
-              />
+            {erreurValidation && (
+              <div className="mb-6 rounded-2xl border border-red-200 bg-red-50 px-5 py-4 text-sm font-black leading-6 text-red-700">
+                {erreurValidation}
+              </div>
+            )}
 
-              <ChampTexte
-                label="Nom du voyageur"
-                value={
-                  etat.validation
-                    .nomVoyageur
-                }
-                placeholder="Nom du voyageur"
-                onChange={(valeur) =>
-                  modifierEtat({
-                    validation: {
-                      ...etat.validation,
-                      nomVoyageur:
-                        valeur,
-                    },
-                  })
-                }
-              />
-            </div>
+            <ValidationSignatures
+              validation={etat.validation}
+              voyageurNom={
+                etat.voyageurNom
+              }
+              verrouille={
+                etat.statut === "signe"
+              }
+              onChange={(validation) => {
+                setErreurValidation("");
 
-            <label className="mt-5 flex min-h-14 cursor-pointer items-start gap-4 rounded-2xl border border-slate-300 bg-slate-50 p-4">
-              <input
-                type="checkbox"
-                checked={
-                  etat.validation
-                    .accordVoyageur
-                }
-                onChange={(event) =>
-                  modifierEtat({
-                    validation: {
-                      ...etat.validation,
-                      accordVoyageur:
-                        event.target
-                          .checked,
-                    },
-                  })
-                }
-                className="mt-1 h-5 w-5 shrink-0 accent-blue-600"
-              />
-
-              <span className="text-sm font-bold leading-6 text-slate-700">
-                Le voyageur confirme avoir
-                pris connaissance des
-                informations et observations
-                saisies.
-              </span>
-            </label>
-
-            <label className="mt-5 block">
-              <span className="mb-2 block text-sm font-black text-slate-700">
-                Observations finales
-              </span>
-
-              <textarea
-                rows={5}
-                value={
-                  etat.validation
-                    .observationsFinales
-                }
-                onChange={(event) =>
-                  modifierEtat({
-                    validation: {
-                      ...etat.validation,
-                      observationsFinales:
-                        event.target.value,
-                    },
-                  })
-                }
-                placeholder="Réserves, désaccords, éléments à transmettre au propriétaire..."
-                className="w-full rounded-2xl border border-slate-300 bg-white px-5 py-4 text-slate-900 outline-none placeholder:text-slate-400 focus:border-blue-600 focus:ring-4 focus:ring-blue-100"
-              />
-            </label>
+                modifierEtat({
+                  validation,
+                });
+              }}
+            />
 
             <div className="mt-6 grid gap-3 sm:grid-cols-2">
               {etat.statut ===
@@ -2178,18 +2288,13 @@ export default function FicheEtatDesLieuxPage() {
                 "termine" && (
                 <button
                   type="button"
-                  onClick={() =>
-                    changerStatut(
-                      "signe"
-                    )
+                  onClick={
+                    validerEtSigner
                   }
-                  disabled={
-                    !etat.validation
-                      .accordVoyageur
-                  }
+                  disabled={!peutSigner}
                   className="min-h-14 rounded-2xl bg-violet-600 px-6 py-3 font-black text-white shadow-lg disabled:cursor-not-allowed disabled:bg-slate-300"
                 >
-                  ✍ Marquer comme signé
+                  ✍ Valider et signer
                 </button>
               )}
 
@@ -2207,6 +2312,8 @@ export default function FicheEtatDesLieuxPage() {
               </Link>
             </div>
           </Bloc>
+
+          <ActionsPdf etat={etat} />
         </div>
       )}
 
@@ -2303,10 +2410,12 @@ function SelectionEtat({
   label,
   value,
   onChange,
+  disabled = false,
 }: {
   label: string;
   value: EtatZone;
   onChange: (valeur: EtatZone) => void;
+  disabled?: boolean;
 }) {
   return (
     <label>
@@ -2316,13 +2425,14 @@ function SelectionEtat({
 
       <select
         value={value}
+        disabled={disabled}
         onChange={(event) =>
           onChange(
             event.target
               .value as EtatZone
           )
         }
-        className="min-h-12 w-full rounded-2xl border border-slate-300 bg-white px-5 py-3 font-bold text-slate-700 outline-none focus:border-blue-600 focus:ring-4 focus:ring-blue-100"
+        className="min-h-12 w-full rounded-2xl border border-slate-300 bg-white px-5 py-3 font-bold text-slate-700 outline-none focus:border-blue-600 focus:ring-4 focus:ring-blue-100 disabled:bg-slate-100"
       >
         {etatsDisponibles.map(
           (etat) => (
@@ -2344,10 +2454,12 @@ function Compteur({
   icone,
   releve,
   onChange,
+  disabled,
 }: {
   titre: string;
   icone: string;
   releve: ReleveCompteur;
+  disabled: boolean;
   onChange: (
     champ: keyof ReleveCompteur,
     valeur: string
@@ -2364,6 +2476,7 @@ function Compteur({
         <ChampTexte
           label="Numéro du compteur"
           value={releve.numero}
+          disabled={disabled}
           placeholder="Numéro ou référence"
           onChange={(valeur) =>
             onChange(
@@ -2376,6 +2489,7 @@ function Compteur({
         <ChampTexte
           label="Index relevé"
           value={releve.index}
+          disabled={disabled}
           placeholder="Valeur affichée"
           onChange={(valeur) =>
             onChange("index", valeur)
@@ -2391,11 +2505,13 @@ function ChampTexte({
   value,
   placeholder,
   onChange,
+  disabled = false,
 }: {
   label: string;
   value: string;
   placeholder?: string;
   onChange: (valeur: string) => void;
+  disabled?: boolean;
 }) {
   return (
     <label>
@@ -2406,11 +2522,12 @@ function ChampTexte({
       <input
         type="text"
         value={value}
+        disabled={disabled}
         placeholder={placeholder}
         onChange={(event) =>
           onChange(event.target.value)
         }
-        className="min-h-12 w-full rounded-2xl border border-slate-300 bg-white px-5 py-3 text-slate-900 outline-none placeholder:text-slate-400 focus:border-blue-600 focus:ring-4 focus:ring-blue-100"
+        className="min-h-12 w-full rounded-2xl border border-slate-300 bg-white px-5 py-3 text-slate-900 outline-none placeholder:text-slate-400 focus:border-blue-600 focus:ring-4 focus:ring-blue-100 disabled:bg-slate-100"
       />
     </label>
   );
@@ -2420,10 +2537,12 @@ function ChampNombre({
   label,
   value,
   onChange,
+  disabled = false,
 }: {
   label: string;
   value: number;
   onChange: (valeur: number) => void;
+  disabled?: boolean;
 }) {
   return (
     <label>
@@ -2437,6 +2556,7 @@ function ChampNombre({
         step={1}
         inputMode="numeric"
         value={value}
+        disabled={disabled}
         onChange={(event) =>
           onChange(
             Math.max(
@@ -2450,7 +2570,7 @@ function ChampNombre({
             )
           )
         }
-        className="min-h-12 w-full rounded-2xl border border-slate-300 bg-white px-5 py-3 text-slate-900 outline-none focus:border-blue-600 focus:ring-4 focus:ring-blue-100"
+        className="min-h-12 w-full rounded-2xl border border-slate-300 bg-white px-5 py-3 text-slate-900 outline-none focus:border-blue-600 focus:ring-4 focus:ring-blue-100 disabled:bg-slate-100"
       />
     </label>
   );
