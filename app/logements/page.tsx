@@ -6,9 +6,25 @@ import PageHeader from "@/components/ui/PageHeader";
 import Section from "@/components/ui/Section";
 import { enregistrer, lire } from "@/lib/database";
 
+type TypeLogement =
+  | ""
+  | "Studio"
+  | "T1"
+  | "T2"
+  | "T3"
+  | "T4"
+  | "T5"
+  | "T6 et plus"
+  | "Maison"
+  | "Villa"
+  | "Autre";
+
 type Logement = {
   id: string;
   nom: string;
+  typeLogement: TypeLogement;
+  superficie: number;
+  nombreChambres: number;
   adresse: string;
   ville: string;
   codePostal: string;
@@ -22,10 +38,26 @@ type Logement = {
   observations: string;
 };
 
+const typesLogement: Exclude<TypeLogement, "">[] = [
+  "Studio",
+  "T1",
+  "T2",
+  "T3",
+  "T4",
+  "T5",
+  "T6 et plus",
+  "Maison",
+  "Villa",
+  "Autre",
+];
+
 function creerLogementVide(): Logement {
   return {
     id: "",
     nom: "",
+    typeLogement: "",
+    superficie: 0,
+    nombreChambres: 0,
     adresse: "",
     ville: "",
     codePostal: "",
@@ -61,35 +93,92 @@ function normaliserTexte(texte: string): string {
     .trim();
 }
 
+function normaliserTypeLogement(
+  valeur: unknown
+): TypeLogement {
+  const type = String(valeur || "");
+
+  if (
+    type === "Studio" ||
+    type === "T1" ||
+    type === "T2" ||
+    type === "T3" ||
+    type === "T4" ||
+    type === "T5" ||
+    type === "T6 et plus" ||
+    type === "Maison" ||
+    type === "Villa" ||
+    type === "Autre"
+  ) {
+    return type;
+  }
+
+  return "";
+}
+
 export default function LogementsPage() {
-  const [logements, setLogements] = useState<Logement[]>([]);
+  const [logements, setLogements] = useState<Logement[]>(
+    []
+  );
+
   const [logementEnCours, setLogementEnCours] =
     useState<Logement>(creerLogementVide());
 
   const [recherche, setRecherche] = useState("");
-  const [formulaireOuvert, setFormulaireOuvert] = useState(false);
-  const [donneesChargees, setDonneesChargees] = useState(false);
+  const [formulaireOuvert, setFormulaireOuvert] =
+    useState(false);
+
+  const [donneesChargees, setDonneesChargees] =
+    useState(false);
+
   const [erreur, setErreur] = useState("");
 
   useEffect(() => {
     const logementsEnregistres =
-      lire<Partial<Logement>>("logements").map((logement) => ({
-        ...creerLogementVide(),
-        ...logement,
-        id: logement.id || creerIdentifiant(),
-        nom: String(logement.nom || ""),
-        adresse: String(logement.adresse || ""),
-        ville: String(logement.ville || ""),
-        codePostal: String(logement.codePostal || ""),
-        proprietaire: String(logement.proprietaire || ""),
-        telephone: String(logement.telephone || ""),
-        email: String(logement.email || ""),
-        wifi: String(logement.wifi || ""),
-        motDePasseWifi: String(logement.motDePasseWifi || ""),
-        boiteCles: String(logement.boiteCles || ""),
-        codeBoiteCles: String(logement.codeBoiteCles || ""),
-        observations: String(logement.observations || ""),
-      }));
+      lire<Partial<Logement>>("logements").map(
+        (logement): Logement => ({
+          ...creerLogementVide(),
+          ...logement,
+          id: logement.id || creerIdentifiant(),
+          nom: String(logement.nom || ""),
+          typeLogement: normaliserTypeLogement(
+            logement.typeLogement
+          ),
+          superficie: Math.max(
+            0,
+            Number(logement.superficie || 0)
+          ),
+          nombreChambres: Math.max(
+            0,
+            Number(logement.nombreChambres || 0)
+          ),
+          adresse: String(logement.adresse || ""),
+          ville: String(logement.ville || ""),
+          codePostal: String(
+            logement.codePostal || ""
+          ),
+          proprietaire: String(
+            logement.proprietaire || ""
+          ),
+          telephone: String(
+            logement.telephone || ""
+          ),
+          email: String(logement.email || ""),
+          wifi: String(logement.wifi || ""),
+          motDePasseWifi: String(
+            logement.motDePasseWifi || ""
+          ),
+          boiteCles: String(
+            logement.boiteCles || ""
+          ),
+          codeBoiteCles: String(
+            logement.codeBoiteCles || ""
+          ),
+          observations: String(
+            logement.observations || ""
+          ),
+        })
+      );
 
     setLogements(logementsEnregistres);
     setDonneesChargees(true);
@@ -103,7 +192,10 @@ export default function LogementsPage() {
 
   useEffect(() => {
     function verifierOuvertureDepuisAdresse() {
-      if (window.location.hash === "#nouveau-logement") {
+      if (
+        window.location.hash ===
+        "#nouveau-logement"
+      ) {
         ouvrirNouveauLogement(false);
       }
     }
@@ -124,7 +216,8 @@ export default function LogementsPage() {
   }, []);
 
   const resultats = useMemo(() => {
-    const rechercheNormalisee = normaliserTexte(recherche);
+    const rechercheNormalisee =
+      normaliserTexte(recherche);
 
     return logements
       .filter((logement) => {
@@ -132,6 +225,9 @@ export default function LogementsPage() {
 
         const contenu = [
           logement.nom,
+          logement.typeLogement,
+          String(logement.superficie),
+          String(logement.nombreChambres),
           logement.adresse,
           logement.ville,
           logement.codePostal,
@@ -139,13 +235,44 @@ export default function LogementsPage() {
           logement.telephone,
           logement.email,
         ]
-          .map((valeur) => normaliserTexte(valeur))
+          .map((valeur) =>
+            normaliserTexte(String(valeur || ""))
+          )
           .join(" ");
 
-        return contenu.includes(rechercheNormalisee);
+        return contenu.includes(
+          rechercheNormalisee
+        );
       })
-      .sort((a, b) => a.nom.localeCompare(b.nom));
+      .sort((a, b) =>
+        a.nom.localeCompare(b.nom, "fr")
+      );
   }, [logements, recherche]);
+
+  const statistiques = useMemo(() => {
+    const superficieTotale = logements.reduce(
+      (total, logement) =>
+        total + logement.superficie,
+      0
+    );
+
+    const logementsRenseignes = logements.filter(
+      (logement) =>
+        logement.typeLogement &&
+        logement.superficie > 0
+    ).length;
+
+    return {
+      total: logements.length,
+      superficieTotale,
+      logementsRenseignes,
+      villes: new Set(
+        logements
+          .map((logement) => logement.ville.trim())
+          .filter(Boolean)
+      ).size,
+    };
+  }, [logements]);
 
   function ouvrirNouveauLogement(
     modifierAdresse = true
@@ -156,7 +283,8 @@ export default function LogementsPage() {
 
     if (
       modifierAdresse &&
-      window.location.hash !== "#nouveau-logement"
+      window.location.hash !==
+        "#nouveau-logement"
     ) {
       window.history.replaceState(
         null,
@@ -175,7 +303,9 @@ export default function LogementsPage() {
     }, 50);
   }
 
-  function ouvrirModification(logement: Logement) {
+  function ouvrirModification(
+    logement: Logement
+  ) {
     setLogementEnCours({ ...logement });
     setErreur("");
     setFormulaireOuvert(true);
@@ -206,12 +336,30 @@ export default function LogementsPage() {
 
   function sauvegarderLogement() {
     if (!logementEnCours.nom.trim()) {
-      setErreur("Le nom du logement est obligatoire.");
+      setErreur(
+        "Le nom du logement est obligatoire."
+      );
+      return;
+    }
+
+    if (!logementEnCours.typeLogement) {
+      setErreur(
+        "Le type de logement est obligatoire."
+      );
+      return;
+    }
+
+    if (logementEnCours.superficie <= 0) {
+      setErreur(
+        "La superficie doit être supérieure à zéro."
+      );
       return;
     }
 
     if (!logementEnCours.adresse.trim()) {
-      setErreur("L’adresse du logement est obligatoire.");
+      setErreur(
+        "L’adresse du logement est obligatoire."
+      );
       return;
     }
 
@@ -224,24 +372,44 @@ export default function LogementsPage() {
       logementEnCours.email &&
       !logementEnCours.email.includes("@")
     ) {
-      setErreur("L’adresse e-mail semble incorrecte.");
+      setErreur(
+        "L’adresse e-mail semble incorrecte."
+      );
       return;
     }
 
     const logementFinal: Logement = {
       ...logementEnCours,
-      id: logementEnCours.id || creerIdentifiant(),
+      id:
+        logementEnCours.id ||
+        creerIdentifiant(),
       nom: logementEnCours.nom.trim(),
+      superficie: Math.max(
+        0,
+        Number(logementEnCours.superficie || 0)
+      ),
+      nombreChambres: Math.max(
+        0,
+        Math.round(
+          Number(
+            logementEnCours.nombreChambres || 0
+          )
+        )
+      ),
       adresse: logementEnCours.adresse.trim(),
       ville: logementEnCours.ville.trim(),
-      codePostal: logementEnCours.codePostal.trim(),
-      proprietaire: logementEnCours.proprietaire.trim(),
-      telephone: logementEnCours.telephone.trim(),
+      codePostal:
+        logementEnCours.codePostal.trim(),
+      proprietaire:
+        logementEnCours.proprietaire.trim(),
+      telephone:
+        logementEnCours.telephone.trim(),
       email: logementEnCours.email.trim(),
       wifi: logementEnCours.wifi.trim(),
       motDePasseWifi:
         logementEnCours.motDePasseWifi.trim(),
-      boiteCles: logementEnCours.boiteCles.trim(),
+      boiteCles:
+        logementEnCours.boiteCles.trim(),
       codeBoiteCles:
         logementEnCours.codeBoiteCles.trim(),
       observations:
@@ -250,7 +418,8 @@ export default function LogementsPage() {
 
     setLogements((liste) => {
       const existe = liste.some(
-        (logement) => logement.id === logementFinal.id
+        (logement) =>
+          logement.id === logementFinal.id
       );
 
       if (existe) {
@@ -267,7 +436,9 @@ export default function LogementsPage() {
     fermerFormulaire();
   }
 
-  function supprimerLogement(logement: Logement) {
+  function supprimerLogement(
+    logement: Logement
+  ) {
     const confirmation = window.confirm(
       `Supprimer définitivement le logement « ${logement.nom} » ?`
     );
@@ -275,29 +446,59 @@ export default function LogementsPage() {
     if (!confirmation) return;
 
     setLogements((liste) =>
-      liste.filter((item) => item.id !== logement.id)
+      liste.filter(
+        (item) => item.id !== logement.id
+      )
     );
 
-    if (logementEnCours.id === logement.id) {
+    if (
+      logementEnCours.id === logement.id
+    ) {
       fermerFormulaire();
     }
   }
 
   return (
-    <div className="space-y-8">
+    <div className="space-y-6 sm:space-y-8">
       <PageHeader
         titre="Logements"
-        description="Gérez tous les logements de votre conciergerie."
+        description="Gérez les logements et les informations qui seront reprises dans les états des lieux."
         action={
           <button
             type="button"
-            onClick={() => ouvrirNouveauLogement()}
-            className="rounded-2xl bg-blue-600 px-6 py-3 text-sm font-black text-white shadow-lg shadow-blue-600/25 transition hover:bg-blue-700 hover:shadow-xl focus:outline-none focus:ring-4 focus:ring-blue-200"
+            onClick={() =>
+              ouvrirNouveauLogement()
+            }
+            className="min-h-12 rounded-2xl bg-blue-600 px-5 py-3 text-sm font-black text-white shadow-lg shadow-blue-600/25 transition hover:bg-blue-700 focus:outline-none focus:ring-4 focus:ring-blue-200"
           >
             + Nouveau logement
           </button>
         }
       />
+
+      <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
+        <CarteStatistique
+          titre="Logements"
+          valeur={String(statistiques.total)}
+        />
+
+        <CarteStatistique
+          titre="Fiches complètes"
+          valeur={String(
+            statistiques.logementsRenseignes
+          )}
+        />
+
+        <CarteStatistique
+          titre="Superficie totale"
+          valeur={`${statistiques.superficieTotale} m²`}
+        />
+
+        <CarteStatistique
+          titre="Villes"
+          valeur={String(statistiques.villes)}
+        />
+      </div>
 
       {formulaireOuvert && (
         <div id="formulaire-logement">
@@ -307,7 +508,7 @@ export default function LogementsPage() {
                 ? "Modifier le logement"
                 : "Nouveau logement"
             }
-            description="Renseignez les informations utiles à la gestion du logement."
+            description="Les caractéristiques du logement seront automatiquement reprises dans ses états des lieux."
           >
             {erreur && (
               <div className="mb-6 rounded-2xl border border-red-200 bg-red-50 px-5 py-4 text-sm font-bold text-red-700">
@@ -315,22 +516,105 @@ export default function LogementsPage() {
               </div>
             )}
 
-            <div className="grid gap-5 md:grid-cols-2 xl:grid-cols-3">
-              <Champ
-                label="Nom du logement"
-                value={logementEnCours.nom}
-                placeholder="Exemple : Appartement Tamaris"
-                onChange={(valeur) =>
-                  setLogementEnCours({
-                    ...logementEnCours,
-                    nom: valeur,
-                  })
-                }
-              />
+            <div className="rounded-3xl border border-blue-200 bg-blue-50 p-4 sm:p-6">
+              <h3 className="text-lg font-black text-blue-950">
+                Caractéristiques du logement
+              </h3>
 
+              <p className="mt-2 text-sm leading-6 text-blue-800">
+                Ces informations apparaîtront dans
+                chaque état des lieux lié à ce
+                logement.
+              </p>
+
+              <div className="mt-5 grid gap-5 md:grid-cols-2 xl:grid-cols-4">
+                <Champ
+                  label="Nom du logement"
+                  value={logementEnCours.nom}
+                  placeholder="Appartement Tamaris"
+                  onChange={(valeur) =>
+                    setLogementEnCours({
+                      ...logementEnCours,
+                      nom: valeur,
+                    })
+                  }
+                />
+
+                <label>
+                  <span className="mb-2 block text-sm font-bold text-slate-700">
+                    Type de logement
+                  </span>
+
+                  <select
+                    value={
+                      logementEnCours.typeLogement
+                    }
+                    onChange={(event) =>
+                      setLogementEnCours({
+                        ...logementEnCours,
+                        typeLogement:
+                          event.target
+                            .value as TypeLogement,
+                      })
+                    }
+                    className="min-h-12 w-full rounded-2xl border border-slate-300 bg-white px-5 py-3 text-slate-900 outline-none focus:border-blue-600 focus:ring-4 focus:ring-blue-100"
+                  >
+                    <option value="">
+                      Sélectionner
+                    </option>
+
+                    {typesLogement.map((type) => (
+                      <option
+                        key={type}
+                        value={type}
+                      >
+                        {type}
+                      </option>
+                    ))}
+                  </select>
+                </label>
+
+                <ChampNombre
+                  label="Superficie"
+                  value={
+                    logementEnCours.superficie
+                  }
+                  min={0}
+                  step={0.5}
+                  suffixe="m²"
+                  onChange={(valeur) =>
+                    setLogementEnCours({
+                      ...logementEnCours,
+                      superficie: valeur,
+                    })
+                  }
+                />
+
+                <ChampNombre
+                  label="Nombre de chambres"
+                  value={
+                    logementEnCours.nombreChambres
+                  }
+                  min={0}
+                  step={1}
+                  suffixe="chambre(s)"
+                  onChange={(valeur) =>
+                    setLogementEnCours({
+                      ...logementEnCours,
+                      nombreChambres:
+                        Math.round(valeur),
+                    })
+                  }
+                />
+              </div>
+            </div>
+
+            <div className="mt-6 grid gap-5 md:grid-cols-2 xl:grid-cols-3">
               <Champ
                 label="Propriétaire"
-                value={logementEnCours.proprietaire}
+                value={
+                  logementEnCours.proprietaire
+                }
                 placeholder="Nom du propriétaire"
                 onChange={(valeur) =>
                   setLogementEnCours({
@@ -343,7 +627,9 @@ export default function LogementsPage() {
               <Champ
                 label="Téléphone"
                 type="tel"
-                value={logementEnCours.telephone}
+                value={
+                  logementEnCours.telephone
+                }
                 placeholder="Téléphone du propriétaire"
                 onChange={(valeur) =>
                   setLogementEnCours({
@@ -354,8 +640,23 @@ export default function LogementsPage() {
               />
 
               <Champ
+                label="Adresse e-mail"
+                type="email"
+                value={logementEnCours.email}
+                placeholder="proprietaire@email.fr"
+                onChange={(valeur) =>
+                  setLogementEnCours({
+                    ...logementEnCours,
+                    email: valeur,
+                  })
+                }
+              />
+
+              <Champ
                 label="Adresse"
-                value={logementEnCours.adresse}
+                value={
+                  logementEnCours.adresse
+                }
                 placeholder="Numéro et nom de rue"
                 onChange={(valeur) =>
                   setLogementEnCours({
@@ -367,7 +668,9 @@ export default function LogementsPage() {
 
               <Champ
                 label="Code postal"
-                value={logementEnCours.codePostal}
+                value={
+                  logementEnCours.codePostal
+                }
                 placeholder="83500"
                 onChange={(valeur) =>
                   setLogementEnCours({
@@ -390,19 +693,6 @@ export default function LogementsPage() {
               />
 
               <Champ
-                label="Adresse e-mail"
-                type="email"
-                value={logementEnCours.email}
-                placeholder="proprietaire@email.fr"
-                onChange={(valeur) =>
-                  setLogementEnCours({
-                    ...logementEnCours,
-                    email: valeur,
-                  })
-                }
-              />
-
-              <Champ
                 label="Nom du réseau Wi-Fi"
                 value={logementEnCours.wifi}
                 placeholder="Nom du réseau"
@@ -416,7 +706,9 @@ export default function LogementsPage() {
 
               <Champ
                 label="Mot de passe Wi-Fi"
-                value={logementEnCours.motDePasseWifi}
+                value={
+                  logementEnCours.motDePasseWifi
+                }
                 placeholder="Mot de passe"
                 onChange={(valeur) =>
                   setLogementEnCours({
@@ -428,8 +720,10 @@ export default function LogementsPage() {
 
               <Champ
                 label="Emplacement de la boîte à clés"
-                value={logementEnCours.boiteCles}
-                placeholder="Exemple : portail, mur de gauche"
+                value={
+                  logementEnCours.boiteCles
+                }
+                placeholder="Portail, mur de gauche..."
                 onChange={(valeur) =>
                   setLogementEnCours({
                     ...logementEnCours,
@@ -440,7 +734,9 @@ export default function LogementsPage() {
 
               <Champ
                 label="Code de la boîte à clés"
-                value={logementEnCours.codeBoiteCles}
+                value={
+                  logementEnCours.codeBoiteCles
+                }
                 placeholder="Code d’accès"
                 onChange={(valeur) =>
                   setLogementEnCours({
@@ -457,11 +753,14 @@ export default function LogementsPage() {
               </span>
 
               <textarea
-                value={logementEnCours.observations}
+                value={
+                  logementEnCours.observations
+                }
                 onChange={(event) =>
                   setLogementEnCours({
                     ...logementEnCours,
-                    observations: event.target.value,
+                    observations:
+                      event.target.value,
                   })
                 }
                 rows={5}
@@ -470,11 +769,11 @@ export default function LogementsPage() {
               />
             </label>
 
-            <div className="mt-6 flex flex-wrap gap-3">
+            <div className="mt-6 flex flex-col gap-3 sm:flex-row sm:flex-wrap">
               <button
                 type="button"
                 onClick={sauvegarderLogement}
-                className="rounded-2xl bg-blue-600 px-6 py-3 font-black text-white shadow-md transition hover:bg-blue-700"
+                className="min-h-12 w-full rounded-2xl bg-blue-600 px-6 py-3 font-black text-white shadow-md transition hover:bg-blue-700 sm:w-auto"
               >
                 Enregistrer le logement
               </button>
@@ -482,7 +781,7 @@ export default function LogementsPage() {
               <button
                 type="button"
                 onClick={fermerFormulaire}
-                className="rounded-2xl border border-slate-300 bg-white px-6 py-3 font-bold text-slate-700 transition hover:bg-slate-50"
+                className="min-h-12 w-full rounded-2xl border border-slate-300 bg-white px-6 py-3 font-bold text-slate-700 transition hover:bg-slate-50 sm:w-auto"
               >
                 Annuler
               </button>
@@ -501,12 +800,12 @@ export default function LogementsPage() {
           onChange={(event) =>
             setRecherche(event.target.value)
           }
-          placeholder="Rechercher un logement, une ville ou un propriétaire..."
-          className="mb-6 w-full rounded-2xl border border-slate-300 bg-white px-5 py-3 text-slate-900 outline-none placeholder:text-slate-400 focus:border-blue-600 focus:ring-4 focus:ring-blue-100"
+          placeholder="Rechercher un logement, un type, une ville ou un propriétaire..."
+          className="mb-6 min-h-12 w-full rounded-2xl border border-slate-300 bg-white px-5 py-3 text-slate-900 outline-none placeholder:text-slate-400 focus:border-blue-600 focus:ring-4 focus:ring-blue-100"
         />
 
         {!donneesChargees ? (
-          <div className="rounded-3xl border border-slate-200 bg-slate-50 p-16 text-center">
+          <div className="rounded-3xl border border-slate-200 bg-slate-50 p-12 text-center sm:p-16">
             <div className="mx-auto h-10 w-10 animate-spin rounded-full border-4 border-slate-200 border-t-blue-600" />
 
             <p className="mt-4 font-bold text-slate-500">
@@ -518,33 +817,52 @@ export default function LogementsPage() {
             {resultats.map((logement) => (
               <article
                 key={logement.id}
-                className="rounded-3xl border border-slate-200 bg-white p-6 shadow-sm transition hover:shadow-md"
+                className="min-w-0 rounded-3xl border border-slate-200 bg-white p-5 shadow-sm transition hover:shadow-md sm:p-6"
               >
                 <div className="flex flex-col gap-5 sm:flex-row sm:items-start sm:justify-between">
-                  <div>
-                    <div className="inline-flex rounded-full bg-blue-100 px-3 py-1 text-xs font-bold text-blue-700">
-                      Logement
+                  <div className="min-w-0">
+                    <div className="flex flex-wrap gap-2">
+                      <span className="rounded-full bg-blue-100 px-3 py-1 text-xs font-bold text-blue-700">
+                        {logement.typeLogement ||
+                          "Type non renseigné"}
+                      </span>
+
+                      <span className="rounded-full bg-emerald-100 px-3 py-1 text-xs font-bold text-emerald-700">
+                        {logement.superficie > 0
+                          ? `${logement.superficie} m²`
+                          : "Superficie non renseignée"}
+                      </span>
+
+                      <span className="rounded-full bg-violet-100 px-3 py-1 text-xs font-bold text-violet-700">
+                        {logement.nombreChambres === 0
+                          ? "Aucune chambre séparée"
+                          : `${logement.nombreChambres} chambre(s)`}
+                      </span>
                     </div>
 
-                    <h3 className="mt-4 text-xl font-black text-slate-950">
+                    <h3 className="mt-4 break-words text-xl font-black text-slate-950">
                       {logement.nom}
                     </h3>
 
-                    <p className="mt-2 text-sm leading-6 text-slate-500">
-                      {logement.adresse}
-                      {logement.codePostal || logement.ville
-                        ? `, ${logement.codePostal} ${logement.ville}`
-                        : ""}
+                    <p className="mt-2 break-words text-sm leading-6 text-slate-500">
+                      {logement.adresse ||
+                        "Adresse non renseignée"}
+
+                      {(logement.codePostal ||
+                        logement.ville) &&
+                        `, ${logement.codePostal} ${logement.ville}`}
                     </p>
                   </div>
 
-                  <div className="flex flex-wrap gap-2">
+                  <div className="flex w-full flex-col gap-2 sm:w-auto sm:flex-row">
                     <button
                       type="button"
                       onClick={() =>
-                        ouvrirModification(logement)
+                        ouvrirModification(
+                          logement
+                        )
                       }
-                      className="rounded-xl bg-slate-900 px-4 py-2 text-sm font-bold text-white hover:bg-slate-800"
+                      className="min-h-11 w-full rounded-xl bg-slate-900 px-4 py-2 text-sm font-bold text-white hover:bg-slate-800 sm:w-auto"
                     >
                       Modifier
                     </button>
@@ -552,9 +870,11 @@ export default function LogementsPage() {
                     <button
                       type="button"
                       onClick={() =>
-                        supprimerLogement(logement)
+                        supprimerLogement(
+                          logement
+                        )
                       }
-                      className="rounded-xl border border-red-200 bg-red-50 px-4 py-2 text-sm font-bold text-red-700 hover:bg-red-100"
+                      className="min-h-11 w-full rounded-xl border border-red-200 bg-red-50 px-4 py-2 text-sm font-bold text-red-700 hover:bg-red-100 sm:w-auto"
                     >
                       Supprimer
                     </button>
@@ -596,7 +916,7 @@ export default function LogementsPage() {
                 </div>
 
                 {logement.observations && (
-                  <p className="mt-5 whitespace-pre-wrap rounded-2xl bg-slate-50 p-4 text-sm leading-6 text-slate-600">
+                  <p className="mt-5 whitespace-pre-wrap break-words rounded-2xl bg-slate-50 p-4 text-sm leading-6 text-slate-600">
                     {logement.observations}
                   </p>
                 )}
@@ -604,7 +924,7 @@ export default function LogementsPage() {
             ))}
           </div>
         ) : (
-          <div className="rounded-3xl border border-dashed border-slate-300 bg-slate-50 px-6 py-16 text-center">
+          <div className="rounded-3xl border border-dashed border-slate-300 bg-slate-50 px-5 py-12 text-center sm:px-6 sm:py-16">
             <div className="text-5xl">🏡</div>
 
             <h3 className="mt-5 text-xl font-black text-slate-900">
@@ -612,19 +932,42 @@ export default function LogementsPage() {
             </h3>
 
             <p className="mx-auto mt-2 max-w-lg text-slate-500">
-              Ajoutez votre premier logement pour commencer à gérer votre activité.
+              Ajoutez votre premier logement pour
+              commencer à gérer votre activité.
             </p>
 
             <button
               type="button"
-              onClick={() => ouvrirNouveauLogement()}
-              className="mt-6 rounded-2xl bg-blue-600 px-6 py-3 font-black text-white shadow-lg shadow-blue-600/25 hover:bg-blue-700"
+              onClick={() =>
+                ouvrirNouveauLogement()
+              }
+              className="mt-6 min-h-12 w-full rounded-2xl bg-blue-600 px-6 py-3 font-black text-white shadow-lg shadow-blue-600/25 hover:bg-blue-700 sm:w-auto"
             >
               + Ajouter le premier logement
             </button>
           </div>
         )}
       </Section>
+    </div>
+  );
+}
+
+function CarteStatistique({
+  titre,
+  valeur,
+}: {
+  titre: string;
+  valeur: string;
+}) {
+  return (
+    <div className="rounded-3xl border border-slate-200 bg-white p-5 shadow-sm sm:p-6">
+      <p className="text-xs font-black uppercase tracking-wider text-slate-500">
+        {titre}
+      </p>
+
+      <p className="mt-3 break-words text-3xl font-black text-slate-950">
+        {valeur}
+      </p>
     </div>
   );
 }
@@ -643,7 +986,7 @@ function Champ({
   placeholder?: string;
 }) {
   return (
-    <label>
+    <label className="min-w-0">
       <span className="mb-2 block text-sm font-bold text-slate-700">
         {label}
       </span>
@@ -655,8 +998,54 @@ function Champ({
         onChange={(event) =>
           onChange(event.target.value)
         }
-        className="w-full rounded-2xl border border-slate-300 bg-white px-5 py-3 text-slate-900 outline-none placeholder:text-slate-400 focus:border-blue-600 focus:ring-4 focus:ring-blue-100"
+        className="min-h-12 w-full min-w-0 rounded-2xl border border-slate-300 bg-white px-5 py-3 text-slate-900 outline-none placeholder:text-slate-400 focus:border-blue-600 focus:ring-4 focus:ring-blue-100"
       />
+    </label>
+  );
+}
+
+function ChampNombre({
+  label,
+  value,
+  onChange,
+  min,
+  step,
+  suffixe,
+}: {
+  label: string;
+  value: number;
+  onChange: (value: number) => void;
+  min: number;
+  step: number;
+  suffixe: string;
+}) {
+  return (
+    <label className="min-w-0">
+      <span className="mb-2 block text-sm font-bold text-slate-700">
+        {label}
+      </span>
+
+      <div className="flex min-h-12 overflow-hidden rounded-2xl border border-slate-300 bg-white focus-within:border-blue-600 focus-within:ring-4 focus-within:ring-blue-100">
+        <input
+          type="number"
+          min={min}
+          step={step}
+          value={value}
+          onChange={(event) =>
+            onChange(
+              Math.max(
+                min,
+                Number(event.target.value || 0)
+              )
+            )
+          }
+          className="min-w-0 flex-1 bg-transparent px-5 py-3 text-slate-900 outline-none"
+        />
+
+        <span className="flex shrink-0 items-center border-l border-slate-200 bg-slate-50 px-3 text-xs font-bold text-slate-500 sm:px-4 sm:text-sm">
+          {suffixe}
+        </span>
+      </div>
     </label>
   );
 }
@@ -669,7 +1058,7 @@ function Info({
   valeur: string;
 }) {
   return (
-    <p>
+    <p className="min-w-0 break-words">
       <span className="font-bold text-slate-700">
         {label} :
       </span>{" "}
