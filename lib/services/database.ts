@@ -1,0 +1,1 @@
+export { DB, lire, enregistrer } from "../database";
