@@ -1,407 +1,690 @@
 "use client";
 
+import Link from "next/link";
 import { useEffect, useMemo, useState } from "react";
+
+import PageHeader from "@/components/ui/PageHeader";
+import Section from "@/components/ui/Section";
+
+import { enregistrer, lire } from "@/lib/database";
+
+import type {
+  Mission,
+  PrioriteMission,
+  StatutMission,
+  TypeMission,
+} from "@/types/mission";
 
 type Logement = {
   id: string;
   nom: string;
-  ville: string;
+  ville?: string;
 };
 
-type EvenementPlanning = {
+type Voyageur = {
   id: string;
-  logementId: string;
-  type: "Arrivée" | "Départ" | "Ménage" | "Pressing" | "Contrôle" | "Intervention";
-  date: string;
-  heure: string;
-  titre: string;
-  statut: "À faire" | "En cours" | "Terminé";
-  notes: string;
+  prenom: string;
+  nom: string;
 };
 
-const evenementVide: EvenementPlanning = {
-  id: "",
-  logementId: "",
-  type: "Arrivée",
-  date: "",
-  heure: "",
-  titre: "",
-  statut: "À faire",
-  notes: "",
-};
+type FiltreStatut = "Tous" | StatutMission;
+type FiltrePriorite = "Toutes" | PrioriteMission;
+type FiltreType = "Tous" | TypeMission;
+
+const statutsMission: StatutMission[] = [
+  "À faire",
+  "En cours",
+  "Terminée",
+  "Annulée",
+];
+
+const prioritesMission: PrioriteMission[] = [
+  "Basse",
+  "Normale",
+  "Haute",
+  "Urgente",
+];
+
+function dateLocaleISO(date: Date): string {
+  const annee = date.getFullYear();
+  const mois = String(date.getMonth() + 1).padStart(2, "0");
+  const jour = String(date.getDate()).padStart(2, "0");
+
+  return `${annee}-${mois}-${jour}`;
+}
+
+function ajouterJours(date: Date, nombre: number): Date {
+  const nouvelleDate = new Date(date);
+  nouvelleDate.setDate(nouvelleDate.getDate() + nombre);
+
+  return nouvelleDate;
+}
+
+function debutDeSemaine(date: Date): Date {
+  const resultat = new Date(date);
+  const jour = resultat.getDay();
+  const decalage = jour === 0 ? -6 : 1 - jour;
+
+  resultat.setDate(resultat.getDate() + decalage);
+  resultat.setHours(12, 0, 0, 0);
+
+  return resultat;
+}
+
+function formaterJour(date: Date): string {
+  return new Intl.DateTimeFormat("fr-FR", {
+    weekday: "long",
+  }).format(date);
+}
+
+function formaterDateCourte(date: Date): string {
+  return new Intl.DateTimeFormat("fr-FR", {
+    day: "2-digit",
+    month: "short",
+  }).format(date);
+}
+
+function formaterPeriode(debut: Date, fin: Date): string {
+  return `${new Intl.DateTimeFormat("fr-FR", {
+    day: "2-digit",
+    month: "long",
+  }).format(debut)} – ${new Intl.DateTimeFormat("fr-FR", {
+    day: "2-digit",
+    month: "long",
+    year: "numeric",
+  }).format(fin)}`;
+}
+
+function normaliserMission(mission: Mission): Mission {
+  const ancienStatut = String(mission.statut);
+
+  return {
+    ...mission,
+    statut:
+      ancienStatut === "Terminé"
+        ? "Terminée"
+        : mission.statut,
+  };
+}
 
 export default function PlanningPage() {
+  const [missions, setMissions] = useState<Mission[]>([]);
   const [logements, setLogements] = useState<Logement[]>([]);
-  const [evenements, setEvenements] = useState<EvenementPlanning[]>([]);
-  const [formulaireOuvert, setFormulaireOuvert] = useState(false);
-  const [evenementEnCours, setEvenementEnCours] =
-    useState<EvenementPlanning>(evenementVide);
-  const [filtreStatut, setFiltreStatut] = useState("Tous");
+  const [voyageurs, setVoyageurs] = useState<Voyageur[]>([]);
+
+  const [dateReference, setDateReference] = useState(
+    debutDeSemaine(new Date())
+  );
+
+  const [filtreStatut, setFiltreStatut] =
+    useState<FiltreStatut>("Tous");
+
+  const [filtrePriorite, setFiltrePriorite] =
+    useState<FiltrePriorite>("Toutes");
+
+  const [filtreType, setFiltreType] =
+    useState<FiltreType>("Tous");
+
+  const [donneesChargees, setDonneesChargees] =
+    useState(false);
 
   useEffect(() => {
-    const sauvegardeLogements = localStorage.getItem("cap-serein-logements");
-    const sauvegardePlanning = localStorage.getItem("cap-serein-planning");
+    setMissions(
+      lire<Mission>("missions").map(normaliserMission)
+    );
 
-    setLogements(sauvegardeLogements ? JSON.parse(sauvegardeLogements) : []);
-    setEvenements(sauvegardePlanning ? JSON.parse(sauvegardePlanning) : []);
+    setLogements(lire<Logement>("logements"));
+    setVoyageurs(lire<Voyageur>("voyageurs"));
+    setDonneesChargees(true);
   }, []);
 
   useEffect(() => {
-    localStorage.setItem("cap-serein-planning", JSON.stringify(evenements));
-  }, [evenements]);
+    if (!donneesChargees) return;
 
-  const evenementsTries = useMemo(() => {
-    return [...evenements]
-      .filter((event) => filtreStatut === "Tous" || event.statut === filtreStatut)
-      .sort((a, b) => `${a.date} ${a.heure}`.localeCompare(`${b.date} ${b.heure}`));
-  }, [evenements, filtreStatut]);
+    enregistrer("missions", missions);
+  }, [missions, donneesChargees]);
 
-  function nomLogement(id: string) {
-    const logement = logements.find((item) => item.id === id);
-    return logement ? `${logement.nom} — ${logement.ville}` : "Logement non sélectionné";
-  }
+  const joursSemaine = useMemo(() => {
+    return Array.from({ length: 7 }, (_, index) =>
+      ajouterJours(dateReference, index)
+    );
+  }, [dateReference]);
 
-  function enregistrerEvenement() {
-    if (!evenementEnCours.date || !evenementEnCours.heure || !evenementEnCours.titre) {
-      alert("Renseigne au minimum la date, l'heure et le titre.");
-      return;
-    }
+  const finSemaine = joursSemaine[6];
+  const aujourdHui = dateLocaleISO(new Date());
 
-    if (evenementEnCours.id) {
-      setEvenements((actuels) =>
-        actuels.map((item) =>
-          item.id === evenementEnCours.id ? evenementEnCours : item
+  const typesDisponibles = useMemo(() => {
+    return Array.from(
+      new Set(missions.map((mission) => mission.type))
+    ).sort();
+  }, [missions]);
+
+  const missionsFiltrees = useMemo(() => {
+    return missions.filter((mission) => {
+      if (
+        filtreStatut !== "Tous" &&
+        mission.statut !== filtreStatut
+      ) {
+        return false;
+      }
+
+      if (
+        filtrePriorite !== "Toutes" &&
+        mission.priorite !== filtrePriorite
+      ) {
+        return false;
+      }
+
+      if (
+        filtreType !== "Tous" &&
+        mission.type !== filtreType
+      ) {
+        return false;
+      }
+
+      return true;
+    });
+  }, [
+    missions,
+    filtreStatut,
+    filtrePriorite,
+    filtreType,
+  ]);
+
+  const statistiques = useMemo(() => {
+    const debut = dateLocaleISO(dateReference);
+    const fin = dateLocaleISO(finSemaine);
+
+    const missionsSemaine = missions.filter(
+      (mission) =>
+        mission.date >= debut && mission.date <= fin
+    );
+
+    return {
+      semaine: missionsSemaine.length,
+
+      aujourdHui: missions.filter(
+        (mission) => mission.date === aujourdHui
+      ).length,
+
+      urgentes: missionsSemaine.filter(
+        (mission) =>
+          mission.priorite === "Urgente" &&
+          mission.statut !== "Terminée" &&
+          mission.statut !== "Annulée"
+      ).length,
+
+      aRealiser: missionsSemaine.filter(
+        (mission) =>
+          mission.statut === "À faire" ||
+          mission.statut === "En cours"
+      ).length,
+    };
+  }, [missions, dateReference, finSemaine, aujourdHui]);
+
+  function missionsDuJour(date: Date): Mission[] {
+    const dateISO = dateLocaleISO(date);
+
+    return missionsFiltrees
+      .filter((mission) => mission.date === dateISO)
+      .sort((a, b) =>
+        (a.heure || "23:59").localeCompare(
+          b.heure || "23:59"
         )
       );
-    } else {
-      setEvenements((actuels) => [
-        ...actuels,
-        { ...evenementEnCours, id: crypto.randomUUID() },
-      ]);
-    }
-
-    setEvenementEnCours(evenementVide);
-    setFormulaireOuvert(false);
   }
 
-  function modifierEvenement(event: EvenementPlanning) {
-    setEvenementEnCours(event);
-    setFormulaireOuvert(true);
-    window.scrollTo({ top: 0, behavior: "smooth" });
+  function nomLogement(id: string): string {
+    const logement = logements.find(
+      (item) => item.id === id
+    );
+
+    if (!logement) return "Sans logement";
+
+    return logement.nom || "Logement sans nom";
   }
 
-  function supprimerEvenement(id: string) {
-    if (!confirm("Supprimer cet événement ?")) return;
-    setEvenements((actuels) => actuels.filter((item) => item.id !== id));
+  function nomVoyageur(id: string): string {
+    const voyageur = voyageurs.find(
+      (item) => item.id === id
+    );
+
+    if (!voyageur) return "";
+
+    return `${voyageur.prenom || ""} ${
+      voyageur.nom || ""
+    }`.trim();
   }
 
-  function changerStatut(id: string, statut: EvenementPlanning["statut"]) {
-    setEvenements((actuels) =>
-      actuels.map((item) => (item.id === id ? { ...item, statut } : item))
+  function changerStatut(
+    id: string,
+    statut: StatutMission
+  ) {
+    const maintenant = new Date().toISOString();
+
+    setMissions((liste) =>
+      liste.map((mission) =>
+        mission.id === id
+          ? {
+              ...mission,
+              statut,
+              updatedAt: maintenant,
+            }
+          : mission
+      )
     );
   }
 
-  const totalAFaire = evenements.filter((item) => item.statut === "À faire").length;
-  const totalEnCours = evenements.filter((item) => item.statut === "En cours").length;
-  const totalTermine = evenements.filter((item) => item.statut === "Terminé").length;
+  function semainePrecedente() {
+    setDateReference((date) =>
+      ajouterJours(date, -7)
+    );
+  }
+
+  function semaineSuivante() {
+    setDateReference((date) =>
+      ajouterJours(date, 7)
+    );
+  }
+
+  function revenirAujourdhui() {
+    setDateReference(debutDeSemaine(new Date()));
+  }
+
+  function reinitialiserFiltres() {
+    setFiltreStatut("Tous");
+    setFiltrePriorite("Toutes");
+    setFiltreType("Tous");
+  }
+
+  const filtresActifs =
+    filtreStatut !== "Tous" ||
+    filtrePriorite !== "Toutes" ||
+    filtreType !== "Tous";
 
   return (
     <div className="space-y-8">
-      <div className="flex flex-col gap-4 xl:flex-row xl:items-center xl:justify-between">
-        <div>
-          <h1 className="text-3xl font-bold text-slate-900">Planning</h1>
-          <p className="mt-2 text-slate-500">
-            Planifiez les arrivées, départs, ménages, pressing, contrôles et interventions.
-          </p>
-        </div>
+      <PageHeader
+        titre="Planning"
+        description="Visualisez et organisez toutes les missions de la semaine."
+        action={
+          <Link
+            href="/missions"
+            className="rounded-2xl bg-blue-600 px-5 py-3 text-sm font-bold text-white shadow-sm transition hover:bg-blue-700"
+          >
+            + Nouvelle mission
+          </Link>
+        }
+      />
 
-        <button
-          onClick={() => {
-            setEvenementEnCours(evenementVide);
-            setFormulaireOuvert(true);
-          }}
-          className="rounded-xl bg-blue-600 px-5 py-3 font-semibold text-white hover:bg-blue-700"
-        >
-          + Nouvel événement
-        </button>
+      <div className="grid gap-6 md:grid-cols-2 xl:grid-cols-4">
+        <CarteStatistique
+          titre="Cette semaine"
+          valeur={statistiques.semaine}
+          couleur="blue"
+        />
+
+        <CarteStatistique
+          titre="Aujourd'hui"
+          valeur={statistiques.aujourdHui}
+          couleur="green"
+        />
+
+        <CarteStatistique
+          titre="À réaliser"
+          valeur={statistiques.aRealiser}
+          couleur="orange"
+        />
+
+        <CarteStatistique
+          titre="Urgentes"
+          valeur={statistiques.urgentes}
+          couleur="red"
+        />
       </div>
 
-      <div className="grid gap-6 md:grid-cols-4">
-        <Stat title="Total" value={String(evenements.length)} />
-        <Stat title="À faire" value={String(totalAFaire)} />
-        <Stat title="En cours" value={String(totalEnCours)} />
-        <Stat title="Terminés" value={String(totalTermine)} />
-      </div>
-
-      {formulaireOuvert && (
-        <div className="rounded-3xl bg-white p-6 shadow">
-          <div className="mb-6 flex items-center justify-between">
-            <h2 className="text-2xl font-bold">
-              {evenementEnCours.id ? "Modifier l’événement" : "Nouvel événement"}
-            </h2>
+      <Section
+        titre="Navigation"
+        description={formaterPeriode(
+          dateReference,
+          finSemaine
+        )}
+      >
+        <div className="flex flex-col gap-4 xl:flex-row xl:items-end xl:justify-between">
+          <div className="flex flex-wrap gap-3">
+            <button
+              type="button"
+              onClick={semainePrecedente}
+              className="rounded-2xl border border-slate-300 bg-white px-5 py-3 text-sm font-bold text-slate-700 transition hover:bg-slate-50"
+            >
+              ← Semaine précédente
+            </button>
 
             <button
-              onClick={() => setFormulaireOuvert(false)}
-              className="rounded-xl border px-4 py-2 hover:bg-slate-100"
+              type="button"
+              onClick={revenirAujourdhui}
+              className="rounded-2xl bg-slate-900 px-5 py-3 text-sm font-bold text-white transition hover:bg-slate-800"
             >
-              Fermer
+              Aujourd'hui
+            </button>
+
+            <button
+              type="button"
+              onClick={semaineSuivante}
+              className="rounded-2xl border border-slate-300 bg-white px-5 py-3 text-sm font-bold text-slate-700 transition hover:bg-slate-50"
+            >
+              Semaine suivante →
             </button>
           </div>
 
-          <div className="grid gap-4 md:grid-cols-2">
-            <Champ
-              label="Titre"
-              value={evenementEnCours.titre}
-              onChange={(v) => setEvenementEnCours({ ...evenementEnCours, titre: v })}
-            />
-
-            <label>
-              <span className="mb-2 block text-sm font-semibold text-slate-700">
-                Logement
-              </span>
-              <select
-                value={evenementEnCours.logementId}
-                onChange={(e) =>
-                  setEvenementEnCours({
-                    ...evenementEnCours,
-                    logementId: e.target.value,
-                  })
-                }
-                className="w-full rounded-xl border border-slate-300 px-4 py-3 outline-none focus:border-blue-600"
-              >
-                <option value="">Aucun logement</option>
-                {logements.map((logement) => (
-                  <option key={logement.id} value={logement.id}>
-                    {logement.nom} — {logement.ville}
-                  </option>
-                ))}
-              </select>
-            </label>
-
-            <Champ
-              label="Date"
-              type="date"
-              value={evenementEnCours.date}
-              onChange={(v) => setEvenementEnCours({ ...evenementEnCours, date: v })}
-            />
-
-            <Champ
-              label="Heure"
-              type="time"
-              value={evenementEnCours.heure}
-              onChange={(v) => setEvenementEnCours({ ...evenementEnCours, heure: v })}
-            />
-
-            <label>
-              <span className="mb-2 block text-sm font-semibold text-slate-700">
-                Type
-              </span>
-              <select
-                value={evenementEnCours.type}
-                onChange={(e) =>
-                  setEvenementEnCours({
-                    ...evenementEnCours,
-                    type: e.target.value as EvenementPlanning["type"],
-                  })
-                }
-                className="w-full rounded-xl border border-slate-300 px-4 py-3 outline-none focus:border-blue-600"
-              >
-                <option>Arrivée</option>
-                <option>Départ</option>
-                <option>Ménage</option>
-                <option>Pressing</option>
-                <option>Contrôle</option>
-                <option>Intervention</option>
-              </select>
-            </label>
-
-            <label>
-              <span className="mb-2 block text-sm font-semibold text-slate-700">
-                Statut
-              </span>
-              <select
-                value={evenementEnCours.statut}
-                onChange={(e) =>
-                  setEvenementEnCours({
-                    ...evenementEnCours,
-                    statut: e.target.value as EvenementPlanning["statut"],
-                  })
-                }
-                className="w-full rounded-xl border border-slate-300 px-4 py-3 outline-none focus:border-blue-600"
-              >
-                <option>À faire</option>
-                <option>En cours</option>
-                <option>Terminé</option>
-              </select>
-            </label>
-          </div>
-
-          <label className="mt-4 block">
-            <span className="mb-2 block text-sm font-semibold text-slate-700">
-              Notes
-            </span>
-            <textarea
-              value={evenementEnCours.notes}
-              onChange={(e) =>
-                setEvenementEnCours({ ...evenementEnCours, notes: e.target.value })
+          <div className="grid gap-3 sm:grid-cols-3">
+            <SelectFiltre
+              label="Statut"
+              value={filtreStatut}
+              onChange={(valeur) =>
+                setFiltreStatut(
+                  valeur as FiltreStatut
+                )
               }
-              rows={4}
-              className="w-full rounded-xl border border-slate-300 px-4 py-3 outline-none focus:border-blue-600"
-              placeholder="Consignes, accès, linge, ménage, client, propriétaire..."
+              options={["Tous", ...statutsMission]}
             />
-          </label>
 
-          <div className="mt-6 flex gap-3">
-            <button
-              onClick={enregistrerEvenement}
-              className="rounded-xl bg-blue-600 px-6 py-3 font-semibold text-white hover:bg-blue-700"
-            >
-              Enregistrer
-            </button>
+            <SelectFiltre
+              label="Priorité"
+              value={filtrePriorite}
+              onChange={(valeur) =>
+                setFiltrePriorite(
+                  valeur as FiltrePriorite
+                )
+              }
+              options={["Toutes", ...prioritesMission]}
+            />
 
-            <button
-              onClick={() => {
-                setEvenementEnCours(evenementVide);
-                setFormulaireOuvert(false);
-              }}
-              className="rounded-xl border px-6 py-3 font-semibold hover:bg-slate-100"
-            >
-              Annuler
-            </button>
+            <SelectFiltre
+              label="Type"
+              value={filtreType}
+              onChange={(valeur) =>
+                setFiltreType(valeur as FiltreType)
+              }
+              options={[
+                "Tous",
+                ...typesDisponibles,
+              ]}
+            />
           </div>
         </div>
-      )}
 
-      <div className="rounded-3xl bg-white p-6 shadow">
-        <div className="flex flex-col gap-4 md:flex-row md:items-center md:justify-between">
-          <div>
-            <h2 className="text-xl font-bold">Événements</h2>
-            <p className="text-sm text-slate-500">
-              Suivi opérationnel de la conciergerie.
+        {filtresActifs && (
+          <button
+            type="button"
+            onClick={reinitialiserFiltres}
+            className="mt-4 text-sm font-bold text-blue-700 hover:text-blue-800"
+          >
+            Réinitialiser tous les filtres
+          </button>
+        )}
+      </Section>
+
+      <Section
+        titre="Semaine"
+        description="Les missions sont classées par jour et par heure."
+      >
+        {!donneesChargees ? (
+          <div className="rounded-3xl border border-slate-200 bg-slate-50 p-16 text-center">
+            <div className="mx-auto h-10 w-10 animate-spin rounded-full border-4 border-slate-200 border-t-blue-600" />
+
+            <p className="mt-4 font-bold text-slate-500">
+              Chargement du planning...
             </p>
           </div>
+        ) : (
+          <div className="overflow-x-auto pb-3">
+            <div className="grid min-w-[1680px] grid-cols-7 gap-4">
+              {joursSemaine.map((date) => {
+                const dateISO = dateLocaleISO(date);
+                const estAujourdhui =
+                  dateISO === aujourdHui;
+                const missionsJour =
+                  missionsDuJour(date);
 
-          <select
-            value={filtreStatut}
-            onChange={(e) => setFiltreStatut(e.target.value)}
-            className="rounded-xl border border-slate-300 px-4 py-3 outline-none focus:border-blue-600"
-          >
-            <option>Tous</option>
-            <option>À faire</option>
-            <option>En cours</option>
-            <option>Terminé</option>
-          </select>
-        </div>
-
-        <div className="mt-6 space-y-4">
-          {evenementsTries.map((event) => (
-            <div
-              key={event.id}
-              className="rounded-2xl border bg-slate-50 p-5"
-            >
-              <div className="flex flex-col gap-4 xl:flex-row xl:items-start xl:justify-between">
-                <div>
-                  <p className="text-sm font-semibold text-blue-600">
-                    {event.type} · {event.statut}
-                  </p>
-
-                  <h3 className="mt-1 text-xl font-bold text-slate-900">
-                    {event.titre}
-                  </h3>
-
-                  <p className="mt-1 text-sm text-slate-500">
-                    {event.date} à {event.heure} · {nomLogement(event.logementId)}
-                  </p>
-
-                  {event.notes && (
-                    <p className="mt-4 rounded-xl bg-white p-4 text-sm text-slate-600">
-                      {event.notes}
-                    </p>
-                  )}
-                </div>
-
-                <div className="flex flex-wrap gap-2">
-                  <button
-                    onClick={() => changerStatut(event.id, "À faire")}
-                    className="rounded-lg border px-3 py-2 text-sm hover:bg-white"
+                return (
+                  <div
+                    key={dateISO}
+                    className={`min-h-[500px] rounded-3xl border p-4 ${
+                      estAujourdhui
+                        ? "border-blue-300 bg-blue-50"
+                        : "border-slate-200 bg-slate-50"
+                    }`}
                   >
-                    À faire
-                  </button>
+                    <div className="mb-4 flex items-start justify-between gap-3">
+                      <div>
+                        <p
+                          className={`capitalize font-black ${
+                            estAujourdhui
+                              ? "text-blue-800"
+                              : "text-slate-900"
+                          }`}
+                        >
+                          {formaterJour(date)}
+                        </p>
 
-                  <button
-                    onClick={() => changerStatut(event.id, "En cours")}
-                    className="rounded-lg border px-3 py-2 text-sm hover:bg-white"
-                  >
-                    En cours
-                  </button>
+                        <p className="mt-1 text-sm font-semibold text-slate-500">
+                          {formaterDateCourte(date)}
+                        </p>
+                      </div>
 
-                  <button
-                    onClick={() => changerStatut(event.id, "Terminé")}
-                    className="rounded-lg border px-3 py-2 text-sm hover:bg-white"
-                  >
-                    Terminé
-                  </button>
+                      <span
+                        className={`flex h-8 min-w-8 items-center justify-center rounded-full px-2 text-xs font-black ${
+                          estAujourdhui
+                            ? "bg-blue-600 text-white"
+                            : "bg-white text-slate-600"
+                        }`}
+                      >
+                        {missionsJour.length}
+                      </span>
+                    </div>
 
-                  <button
-                    onClick={() => modifierEvenement(event)}
-                    className="rounded-lg bg-blue-600 px-3 py-2 text-sm text-white hover:bg-blue-700"
-                  >
-                    Modifier
-                  </button>
-
-                  <button
-                    onClick={() => supprimerEvenement(event.id)}
-                    className="rounded-lg border border-red-300 px-3 py-2 text-sm text-red-600 hover:bg-red-50"
-                  >
-                    Supprimer
-                  </button>
-                </div>
-              </div>
+                    <div className="space-y-3">
+                      {missionsJour.length > 0 ? (
+                        missionsJour.map((mission) => (
+                          <CartePlanning
+                            key={mission.id}
+                            mission={mission}
+                            logement={nomLogement(
+                              mission.logementId
+                            )}
+                            voyageur={nomVoyageur(
+                              mission.voyageurId
+                            )}
+                            onChangerStatut={(statut) =>
+                              changerStatut(
+                                mission.id,
+                                statut
+                              )
+                            }
+                          />
+                        ))
+                      ) : (
+                        <div className="rounded-2xl border border-dashed border-slate-300 bg-white/70 px-4 py-8 text-center">
+                          <p className="text-sm font-semibold text-slate-400">
+                            Aucune mission
+                          </p>
+                        </div>
+                      )}
+                    </div>
+                  </div>
+                );
+              })}
             </div>
-          ))}
-
-          {evenementsTries.length === 0 && (
-            <div className="rounded-2xl border border-dashed p-8 text-center text-slate-500">
-              Aucun événement enregistré.
-            </div>
-          )}
-        </div>
-      </div>
+          </div>
+        )}
+      </Section>
     </div>
   );
 }
 
-function Stat({ title, value }: { title: string; value: string }) {
+function CartePlanning({
+  mission,
+  logement,
+  voyageur,
+  onChangerStatut,
+}: {
+  mission: Mission;
+  logement: string;
+  voyageur: string;
+  onChangerStatut: (statut: StatutMission) => void;
+}) {
+  const prioriteClasses: Record<
+    PrioriteMission,
+    string
+  > = {
+    Basse:
+      "border-slate-200 bg-slate-100 text-slate-700",
+    Normale:
+      "border-blue-200 bg-blue-50 text-blue-700",
+    Haute:
+      "border-orange-200 bg-orange-50 text-orange-700",
+    Urgente:
+      "border-red-200 bg-red-50 text-red-700",
+  };
+
+  const statutClasses: Record<StatutMission, string> = {
+    "À faire":
+      "bg-orange-100 text-orange-700",
+    "En cours":
+      "bg-blue-100 text-blue-700",
+    Terminée:
+      "bg-emerald-100 text-emerald-700",
+    Annulée:
+      "bg-slate-200 text-slate-500",
+  };
+
   return (
-    <div className="rounded-3xl bg-white p-6 shadow">
-      <p className="text-sm font-semibold text-slate-500">{title}</p>
-      <p className="mt-3 text-4xl font-bold text-slate-900">{value}</p>
+    <article className="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm">
+      <div className="flex items-start justify-between gap-2">
+        <span
+          className={`rounded-full px-2 py-1 text-[10px] font-black ${statutClasses[mission.statut]}`}
+        >
+          {mission.statut}
+        </span>
+
+        <span
+          className={`rounded-full border px-2 py-1 text-[10px] font-black ${prioriteClasses[mission.priorite]}`}
+        >
+          {mission.priorite}
+        </span>
+      </div>
+
+      <p className="mt-3 text-sm font-black text-slate-950">
+        {mission.heure || "--:--"} · {mission.titre}
+      </p>
+
+      <p className="mt-2 text-xs font-semibold text-violet-700">
+        {mission.type}
+      </p>
+
+      <div className="mt-3 space-y-1 text-xs text-slate-500">
+        <p className="truncate">🏠 {logement}</p>
+
+        {voyageur && (
+          <p className="truncate">👤 {voyageur}</p>
+        )}
+
+        {mission.assigneA && (
+          <p className="truncate">
+            🧑‍🔧 {mission.assigneA}
+          </p>
+        )}
+      </div>
+
+      {mission.description && (
+        <p className="mt-3 line-clamp-3 rounded-xl bg-slate-50 p-3 text-xs leading-5 text-slate-600">
+          {mission.description}
+        </p>
+      )}
+
+      <select
+        value={mission.statut}
+        onChange={(event) =>
+          onChangerStatut(
+            event.target.value as StatutMission
+          )
+        }
+        className="mt-4 w-full rounded-xl border border-slate-300 bg-white px-3 py-2 text-xs font-bold text-slate-700 outline-none focus:border-blue-600"
+      >
+        {statutsMission.map((statut) => (
+          <option key={statut} value={statut}>
+            {statut}
+          </option>
+        ))}
+      </select>
+    </article>
+  );
+}
+
+function CarteStatistique({
+  titre,
+  valeur,
+  couleur,
+}: {
+  titre: string;
+  valeur: number;
+  couleur: "blue" | "green" | "orange" | "red";
+}) {
+  const couleurs = {
+    blue: "border-blue-200 bg-blue-50 text-blue-700",
+    green:
+      "border-emerald-200 bg-emerald-50 text-emerald-700",
+    orange:
+      "border-orange-200 bg-orange-50 text-orange-700",
+    red: "border-red-200 bg-red-50 text-red-700",
+  };
+
+  return (
+    <div className="rounded-3xl border border-slate-200 bg-white p-6 shadow-sm">
+      <span
+        className={`inline-flex rounded-2xl border px-3 py-1 text-xs font-bold ${couleurs[couleur]}`}
+      >
+        {titre}
+      </span>
+
+      <p className="mt-5 text-4xl font-black text-slate-950">
+        {valeur}
+      </p>
     </div>
   );
 }
 
-function Champ({
+function SelectFiltre({
   label,
   value,
+  options,
   onChange,
-  type = "text",
 }: {
   label: string;
   value: string;
+  options: string[];
   onChange: (value: string) => void;
-  type?: string;
 }) {
   return (
     <label>
-      <span className="mb-2 block text-sm font-semibold text-slate-700">
+      <span className="mb-2 block text-xs font-bold text-slate-600">
         {label}
       </span>
-      <input
-        type={type}
+
+      <select
         value={value}
-        onChange={(e) => onChange(e.target.value)}
-        className="w-full rounded-xl border border-slate-300 px-4 py-3 outline-none focus:border-blue-600"
-      />
+        onChange={(event) =>
+          onChange(event.target.value)
+        }
+        className="min-h-11 w-full rounded-2xl border border-slate-300 bg-white px-4 py-2 text-sm font-semibold text-slate-700 outline-none focus:border-blue-600 focus:ring-4 focus:ring-blue-100"
+      >
+        {options.map((option) => (
+          <option key={option} value={option}>
+            {option}
+          </option>
+        ))}
+      </select>
     </label>
   );
 }
