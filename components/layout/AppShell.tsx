@@ -1,12 +1,17 @@
 "use client";
 
 import Link from "next/link";
-import { usePathname } from "next/navigation";
+import {
+  usePathname,
+  useRouter,
+} from "next/navigation";
 import {
   useEffect,
   useState,
   type ReactNode,
 } from "react";
+
+import { supabase } from "@/lib/supabase";
 
 type ElementMenu = {
   href: string;
@@ -127,8 +132,12 @@ export default function AppShell({
   children: ReactNode;
 }) {
   const pathname = usePathname();
+  const router = useRouter();
 
   const [menuMobileOuvert, setMenuMobileOuvert] =
+    useState(false);
+
+  const [deconnexionEnCours, setDeconnexionEnCours] =
     useState(false);
 
   useEffect(() => {
@@ -147,6 +156,34 @@ export default function AppShell({
       document.body.style.overflow = "";
     };
   }, [menuMobileOuvert]);
+
+  async function seDeconnecter() {
+    if (deconnexionEnCours) {
+      return;
+    }
+
+    setDeconnexionEnCours(true);
+    setMenuMobileOuvert(false);
+
+    const { error } = await supabase.auth.signOut();
+
+    if (error) {
+      console.error(
+        "Erreur pendant la déconnexion :",
+        error
+      );
+
+      setDeconnexionEnCours(false);
+      return;
+    }
+
+    router.replace("/connexion");
+    router.refresh();
+  }
+
+  if (pathname === "/connexion") {
+    return <>{children}</>;
+  }
 
   const titrePage = trouverTitre(pathname);
 
@@ -195,14 +232,27 @@ export default function AppShell({
           })}
         </nav>
 
-        <div className="border-t border-slate-800 px-7 py-5 text-xs text-slate-500">
-          <p className="font-bold text-slate-400">
-            Version Alpha
-          </p>
+        <div className="border-t border-slate-800 px-4 py-4">
+          <button
+            type="button"
+            onClick={seDeconnecter}
+            disabled={deconnexionEnCours}
+            className="flex min-h-11 w-full items-center justify-center rounded-2xl border border-red-900/60 bg-red-950/30 px-4 py-2 text-sm font-bold text-red-300 transition hover:bg-red-950/60 hover:text-red-200 disabled:cursor-not-allowed disabled:opacity-50"
+          >
+            {deconnexionEnCours
+              ? "Déconnexion..."
+              : "Se déconnecter"}
+          </button>
 
-          <p className="mt-2">
-            © 2026 Cap Serein Manager
-          </p>
+          <div className="px-3 pt-4 text-xs text-slate-500">
+            <p className="font-bold text-slate-400">
+              Version Alpha
+            </p>
+
+            <p className="mt-2">
+              © 2026 Cap Serein Manager
+            </p>
+          </div>
         </div>
       </aside>
 
@@ -277,13 +327,24 @@ export default function AppShell({
               })}
             </nav>
 
-            <div className="border-t border-slate-800 p-4">
+            <div className="space-y-3 border-t border-slate-800 p-4">
               <Link
                 href="/logements#nouveau-logement"
                 className="flex min-h-14 w-full items-center justify-center rounded-2xl bg-blue-600 px-5 py-3 font-black text-white shadow-lg"
               >
                 + Nouveau logement
               </Link>
+
+              <button
+                type="button"
+                onClick={seDeconnecter}
+                disabled={deconnexionEnCours}
+                className="flex min-h-14 w-full items-center justify-center rounded-2xl border border-red-900/60 bg-red-950/30 px-5 py-3 font-black text-red-300 disabled:cursor-not-allowed disabled:opacity-50"
+              >
+                {deconnexionEnCours
+                  ? "Déconnexion..."
+                  : "Se déconnecter"}
+              </button>
             </div>
           </aside>
         </div>

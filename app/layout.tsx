@@ -4,6 +4,7 @@ import type {
 } from "next";
 
 import AppShell from "@/components/layout/AppShell";
+import AuthGuard from "@/components/auth/AuthGuard";
 
 import "./globals.css";
 
@@ -28,9 +29,11 @@ export default function RootLayout({
   return (
     <html lang="fr">
       <body>
-        <AppShell>
-          {children}
-        </AppShell>
+        <AuthGuard>
+          <AppShell>
+            {children}
+          </AppShell>
+        </AuthGuard>
       </body>
     </html>
   );
