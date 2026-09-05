@@ -15,6 +15,31 @@ import ValidationSignatures, {
 } from "@/components/etats-des-lieux/ValidationSignatures";
 import ActionsPdf from "@/components/etats-des-lieux/ActionsPdf";
 import { lire } from "@/lib/database";
+import {
+  chargerClesEdl,
+  chargerEnteteEdl,
+  chargerRelevesEdl,
+  chargerZonesEdl,
+  estUuidEdl,
+  nouvelUuidEdl,
+  obtenirOrganisationEdl,
+  sauvegarderClesEdl,
+  sauvegarderEnteteEdl,
+  sauvegarderRelevesEdl,
+  sauvegarderValidationEdl,
+  sauvegarderZonesEdl,
+} from "@/lib/edlSupabase";
+import {
+  chargerPhotosEdl,
+  modifierCommentairePhotoEdl,
+  supprimerPhotoEdl,
+  televerserPhotoEdl,
+} from "@/lib/edlPhotosSupabase";
+import {
+  chargerUrlSignatureEdl,
+  supprimerSignatureEdl,
+  televerserSignatureEdl,
+} from "@/lib/edlSignaturesSupabase";
 
 type StatutEtatDesLieux =
   | "a_preparer"
@@ -40,8 +65,9 @@ type PhotoEtatDesLieux = {
   nom: string;
   annotation: string;
   dateAjout: string;
-  source: "camera" | "galerie";
+  source: "camera" | "galerie" | "supabase";
   tailleOriginale: number;
+  storagePath?: string;
 };
 
 type ZoneEtatDesLieux = {
@@ -345,7 +371,7 @@ function creerZonesParDefaut(
   );
 
   return noms.map((nom) => ({
-    id: creerIdentifiant("zone"),
+    id: nouvelUuidEdl(),
     nom,
     etat: "non_verifie",
     observations: "",
@@ -367,6 +393,24 @@ function normaliserPhoto(
     return null;
   }
 
+  const storagePath =
+    texte(photo.storagePath) ||
+    texte(photo.storage_path);
+
+  let source: PhotoEtatDesLieux["source"] =
+    "galerie";
+
+  if (
+    photo.source === "supabase" ||
+    storagePath
+  ) {
+    source = "supabase";
+  } else if (
+    photo.source === "camera"
+  ) {
+    source = "camera";
+  }
+
   return {
     id:
       texte(photo.id) ||
@@ -376,6 +420,8 @@ function normaliserPhoto(
 
     nom:
       texte(photo.nom) ||
+      texte(photo.nomFichier) ||
+      texte(photo.nom_fichier) ||
       texte(photo.name) ||
       "Photo",
 
@@ -385,17 +431,27 @@ function normaliserPhoto(
 
     dateAjout:
       texte(photo.dateAjout) ||
+      texte(photo.datePriseVue) ||
+      texte(photo.date_prise_vue) ||
       texte(photo.date) ||
       new Date().toISOString(),
 
-    source:
-      photo.source === "camera"
-        ? "camera"
-        : "galerie",
+    source,
 
-    tailleOriginale: nombre(
-      photo.tailleOriginale
-    ),
+    tailleOriginale:
+      nombre(
+        photo.tailleOriginale
+      ) ||
+      nombre(
+        photo.tailleOctets
+      ) ||
+      nombre(
+        photo.taille_octets
+      ),
+
+    storagePath:
+      storagePath ||
+      undefined,
   };
 }
 
@@ -431,8 +487,9 @@ function normaliserZones(
 
       return {
         id:
-          texte(zone.id) ||
-          creerIdentifiant("zone"),
+          estUuidEdl(texte(zone.id))
+            ? texte(zone.id)
+            : nouvelUuidEdl(),
 
         nom,
 
@@ -500,6 +557,72 @@ function creerValidation(
       validation.dateSignatureOperateur
     ),
   };
+}
+
+function dateHeureDepuisIso(
+  valeur: string
+): { date: string; heure: string } {
+  if (!valeur) {
+    return { date: "", heure: "" };
+  }
+
+  const date = new Date(valeur);
+
+  if (Number.isNaN(date.getTime())) {
+    return {
+      date: valeur.slice(0, 10),
+      heure: "",
+    };
+  }
+
+  const annee = date.getFullYear();
+  const mois = String(
+    date.getMonth() + 1
+  ).padStart(2, "0");
+  const jour = String(
+    date.getDate()
+  ).padStart(2, "0");
+  const heures = String(
+    date.getHours()
+  ).padStart(2, "0");
+  const minutes = String(
+    date.getMinutes()
+  ).padStart(2, "0");
+
+  return {
+    date: `${annee}-${mois}-${jour}`,
+    heure: `${heures}:${minutes}`,
+  };
+}
+
+function normaliserNomComparaison(
+  valeur: unknown
+): string {
+  return texte(valeur)
+    .normalize("NFD")
+    .replace(/[\u0300-\u036f]/g, "")
+    .toLowerCase()
+    .trim();
+}
+
+function messageErreur(
+  erreur: unknown
+): string {
+  if (erreur instanceof Error) {
+    return erreur.message;
+  }
+
+  if (
+    erreur &&
+    typeof erreur === "object" &&
+    "message" in erreur
+  ) {
+    return texte(
+      (erreur as { message?: unknown }).message
+    );
+  }
+
+  return "Erreur Supabase inconnue.";
 }
 
 function normaliserEtatDesLieux(
@@ -851,6 +974,26 @@ export default function FicheEtatDesLieuxPage() {
   const [etat, setEtat] =
     useState<EtatDesLieux | null>(null);
 
+  const [
+    organizationId,
+    setOrganizationId,
+  ] = useState("");
+
+  const [
+    signatureVoyageurPath,
+    setSignatureVoyageurPath,
+  ] = useState("");
+
+  const [
+    signatureOperateurPath,
+    setSignatureOperateurPath,
+  ] = useState("");
+
+  const [
+    synchronisationActive,
+    setSynchronisationActive,
+  ] = useState(false);
+
   const [etapeActive, setEtapeActive] =
     useState<Etape>("resume");
 
@@ -876,6 +1019,16 @@ export default function FicheEtatDesLieuxPage() {
   ] = useState("");
 
   const [
+    sauvegardeEnCours,
+    setSauvegardeEnCours,
+  ] = useState(false);
+
+  const [
+    messageSauvegarde,
+    setMessageSauvegarde,
+  ] = useState("");
+
+  const [
     erreurValidation,
     setErreurValidation,
   ] = useState("");
@@ -886,171 +1039,893 @@ export default function FicheEtatDesLieuxPage() {
   ] = useState("");
 
   useEffect(() => {
-    const logements =
-      lire<Partial<Logement>>(
-        "logements"
-      ).map(
-        (logement): Logement => ({
-          id: texte(logement.id),
-          nom: texte(logement.nom),
+    let actif = true;
 
-          typeLogement: texte(
-            logement.typeLogement
+    async function chargerFiche() {
+      setChargement(true);
+      setIntrouvable(false);
+      setSynchronisationActive(false);
+      setErreurSauvegarde("");
+
+      try {
+        const orgId =
+          await obtenirOrganisationEdl();
+
+        const [
+          entete,
+          zonesDistantes,
+          relevesDistants,
+          clesDistantes,
+          photosDistantes,
+        ] = await Promise.all([
+          chargerEnteteEdl(
+            orgId,
+            missionId
           ),
-
-          superficie: nombre(
-            logement.superficie
+          chargerZonesEdl(
+            orgId,
+            missionId
           ),
-
-          nombreChambres: nombre(
-            logement.nombreChambres
+          chargerRelevesEdl(
+            orgId,
+            missionId
           ),
-
-          adresse: texte(
-            logement.adresse
+          chargerClesEdl(
+            orgId,
+            missionId
           ),
-
-          codePostal: texte(
-            logement.codePostal
+          chargerPhotosEdl(
+            orgId,
+            missionId
           ),
+        ]);
 
-          ville: texte(logement.ville),
-        })
-      );
+        if (!actif) {
+          return;
+        }
 
-    const voyageurs =
-      lire<Partial<Voyageur>>(
-        "voyageurs"
-      ).map(
-        (voyageur): Voyageur => ({
-          id: texte(voyageur.id),
-          nom: texte(voyageur.nom),
+        const logementSnapshot =
+          entete.logementSnapshot;
 
-          prenom: texte(
-            voyageur.prenom
-          ),
+        const voyageurSnapshot =
+          entete.voyageurSnapshot;
 
-          nomComplet:
-            nomCompletVoyageur(
-              voyageur
+        const datePrevue =
+          dateHeureDepuisIso(
+            entete.datePrevue
+          );
+
+        const nombreChambres =
+          nombre(
+            logementSnapshot.nombreChambres
+          ) ||
+          nombre(
+            logementSnapshot.nombre_chambres
+          );
+
+        const listeLocale =
+          lire<Record<string, unknown>>(
+            "etatsDesLieux"
+          );
+
+        let elementLocal =
+          listeLocale.find(
+            (item) =>
+              texte(item.id) === missionId ||
+              texte(item.missionId) ===
+                missionId
+          );
+
+        /*
+         * Pour les anciens EDL dont l'identifiant
+         * local n'était pas un UUID, on tente une
+         * correspondance métier afin de récupérer
+         * les photos et signatures locales.
+         */
+        if (!elementLocal) {
+          elementLocal =
+            listeLocale.find((item) => {
+              const memeLogement =
+                texte(item.logementId) ===
+                entete.logementId;
+
+              const memeVoyageur =
+                !entete.voyageurId ||
+                texte(item.voyageurId) ===
+                  entete.voyageurId;
+
+              const memeType =
+                (texte(item.type) ===
+                  "sortie"
+                  ? "sortie"
+                  : "entree") ===
+                entete.type;
+
+              const memeDate =
+                !datePrevue.date ||
+                texte(item.date) ===
+                  datePrevue.date;
+
+              return (
+                memeLogement &&
+                memeVoyageur &&
+                memeType &&
+                memeDate
+              );
+            });
+        }
+
+        const local =
+          elementLocal || {};
+
+        const zonesLocales =
+          normaliserZones(
+            local.zones,
+            nombreChambres
+          );
+
+        const zonesFinales:
+          ZoneEtatDesLieux[] =
+          zonesDistantes.length > 0
+            ? zonesDistantes.map(
+                (zone) => {
+                  const locale =
+                    zonesLocales.find(
+                      (candidate) =>
+                        candidate.id ===
+                          zone.id ||
+                        normaliserNomComparaison(
+                          candidate.nom
+                        ) ===
+                          normaliserNomComparaison(
+                            zone.nom
+                          )
+                    );
+
+                  const photosSupabase =
+                    photosDistantes
+                      .filter(
+                        (photo) =>
+                          photo.zoneId === zone.id
+                      )
+                      .map(
+                        (photo): PhotoEtatDesLieux => ({
+                          id: photo.id,
+                          dataUrl: photo.url,
+                          nom: photo.nomFichier,
+                          annotation: photo.commentaire,
+                          dateAjout: photo.datePriseVue,
+                          source: "supabase",
+                          tailleOriginale: photo.tailleOctets,
+                          storagePath: photo.storagePath,
+                        })
+                      );
+
+                  const idsSupabase = new Set(
+                    photosSupabase.map(
+                      (photo) => photo.id
+                    )
+                  );
+
+                  const photosLocales =
+                    (locale?.photos || []).filter(
+                      (photo) =>
+                        !idsSupabase.has(photo.id) &&
+                        !photo.storagePath
+                    );
+
+                  return {
+                    id: zone.id,
+                    nom: zone.nom,
+                    etat: zone.etat,
+                    observations:
+                      zone.observations,
+                    photos: [
+                      ...photosSupabase,
+                      ...photosLocales,
+                    ],
+                  };
+                }
+              )
+            : zonesLocales;
+
+        const compteursLocaux =
+          objet(local.compteurs);
+
+        const compteurs = {
+          electricite:
+            creerReleve(
+              compteursLocaux.electricite
             ),
+          eauFroide:
+            creerReleve(
+              compteursLocaux.eauFroide
+            ),
+          eauChaude:
+            creerReleve(
+              compteursLocaux.eauChaude
+            ),
+          gaz:
+            creerReleve(
+              compteursLocaux.gaz
+            ),
+        };
 
-          telephone: texte(
-            voyageur.telephone
-          ),
+        for (
+          const releve of relevesDistants
+        ) {
+          const type =
+            normaliserNomComparaison(
+              releve.typeCompteur
+            ).replace(/\\s+/g, "_");
 
-          email: texte(
-            voyageur.email
-          ),
-        })
-      );
-
-    const liste =
-      lire<Record<string, unknown>>(
-        "etatsDesLieux"
-      );
-
-    const element = liste.find(
-      (item) =>
-        texte(item.id) === missionId ||
-        texte(item.missionId) ===
-          missionId
-    );
-
-    if (!element) {
-      setIntrouvable(true);
-      setChargement(false);
-      return;
-    }
-
-    const logement = logements.find(
-      (item) =>
-        item.id ===
-        texte(element.logementId)
-    );
-
-    const voyageur = voyageurs.find(
-      (item) =>
-        item.id ===
-        texte(element.voyageurId)
-    );
-
-    setEtat(
-      normaliserEtatDesLieux(
-        element,
-        logement,
-        voyageur
-      )
-    );
-
-    setChargement(false);
-  }, [missionId]);
-
-  useEffect(() => {
-    if (!etat || chargement) {
-      return;
-    }
-
-    const minuterie = window.setTimeout(
-      () => {
-        try {
-          const liste =
-            lire<
-              Record<string, unknown>
-            >("etatsDesLieux");
-
-          const versionSauvegardee = {
-            ...etat,
-            dateModification:
-              new Date().toISOString(),
+          const valeur = {
+            numero: releve.numero,
+            index: releve.valeur,
           };
 
-          const existe = liste.some(
-            (element) =>
-              texte(element.id) ===
-                etat.id ||
-              texte(
-                element.missionId
-              ) === etat.missionId
-          );
-
-          const nouvelleListe = existe
-            ? liste.map((element) => {
-                const correspond =
-                  texte(element.id) ===
-                    etat.id ||
-                  texte(
-                    element.missionId
-                  ) ===
-                    etat.missionId;
-
-                return correspond
-                  ? versionSauvegardee
-                  : element;
-              })
-            : [
-                versionSauvegardee,
-                ...liste,
-              ];
-
-          window.localStorage.setItem(
-            "cap-serein-etats-des-lieux",
-            JSON.stringify(nouvelleListe)
-          );
-
-          setErreurSauvegarde("");
-        } catch {
-          setErreurSauvegarde(
-            "La sauvegarde locale est pleine. Supprimez quelques photos avant de poursuivre."
-          );
+          if (type === "electricite") {
+            compteurs.electricite = valeur;
+          } else if (
+            type === "eau_froide" ||
+            type === "eaufroide"
+          ) {
+            compteurs.eauFroide = valeur;
+          } else if (
+            type === "eau_chaude" ||
+            type === "eauchaude"
+          ) {
+            compteurs.eauChaude = valeur;
+          } else if (type === "gaz") {
+            compteurs.gaz = valeur;
+          }
         }
-      },
-      350
-    );
 
-    return () =>
-      window.clearTimeout(minuterie);
-  }, [etat, chargement]);
+        const clesLocales =
+          objet(local.cles);
+
+        const cles = {
+          nombreJeux: nombre(
+            clesLocales.nombreJeux
+          ),
+          nombreBadges: nombre(
+            clesLocales.nombreBadges
+          ),
+          nombreTelecommandes: nombre(
+            clesLocales.nombreTelecommandes
+          ),
+          observations: texte(
+            clesLocales.observations
+          ),
+        };
+
+        for (const cle of clesDistantes) {
+          const libelle =
+            normaliserNomComparaison(
+              cle.libelle
+            );
+
+          if (
+            libelle.includes("jeu") &&
+            libelle.includes("cle")
+          ) {
+            cles.nombreJeux =
+              cle.quantiteConstatee;
+          } else if (
+            libelle.includes("badge")
+          ) {
+            cles.nombreBadges =
+              cle.quantiteConstatee;
+          } else if (
+            libelle.includes("telecommande")
+          ) {
+            cles.nombreTelecommandes =
+              cle.quantiteConstatee;
+          }
+
+          if (
+            cle.observations &&
+            !cles.observations
+          ) {
+            cles.observations =
+              cle.observations;
+          }
+        }
+
+        const logementNom =
+          texte(logementSnapshot.nom) ||
+          texte(local.logementNom) ||
+          "Logement non renseigné";
+
+        const typeLogement =
+          texte(
+            logementSnapshot.typeLogement
+          ) ||
+          texte(
+            logementSnapshot.type_logement
+          ) ||
+          texte(local.typeLogement);
+
+        const superficie =
+          nombre(logementSnapshot.superficie) ||
+          nombre(
+            logementSnapshot.superficie_m2
+          ) ||
+          nombre(local.superficie);
+
+        const adresseLogement =
+          texte(
+            logementSnapshot.adresseComplete
+          ) ||
+          texte(
+            logementSnapshot.adresse_complete
+          ) ||
+          [
+            texte(logementSnapshot.adresse),
+            [
+              texte(
+                logementSnapshot.codePostal
+              ) ||
+                texte(
+                  logementSnapshot.code_postal
+                ),
+              texte(logementSnapshot.ville),
+            ]
+              .filter(Boolean)
+              .join(" "),
+          ]
+            .filter(Boolean)
+            .join(", ") ||
+          texte(local.adresseLogement);
+
+        const voyageurNom =
+          texte(
+            voyageurSnapshot.nomComplet
+          ) ||
+          texte(
+            voyageurSnapshot.nom_complet
+          ) ||
+          [
+            texte(voyageurSnapshot.prenom),
+            texte(voyageurSnapshot.nom),
+          ]
+            .filter(Boolean)
+            .join(" ") ||
+          texte(local.voyageurNom) ||
+          "Voyageur non renseigné";
+
+        const validationLocale =
+          creerValidation(
+            local.validation,
+            voyageurNom
+          );
+
+        const [
+          urlSignatureVoyageur,
+          urlSignatureOperateur,
+        ] = await Promise.all([
+          entete.validation
+            .signatureVoyageurPath
+            ? chargerUrlSignatureEdl(
+                entete.validation
+                  .signatureVoyageurPath
+              )
+            : Promise.resolve(""),
+
+          entete.validation
+            .signatureOperateurPath
+            ? chargerUrlSignatureEdl(
+                entete.validation
+                  .signatureOperateurPath
+              )
+            : Promise.resolve(""),
+        ]);
+
+        if (!actif) {
+          return;
+        }
+
+        const validationFinale:
+          DonneesValidation = {
+          nomOperateur:
+            entete.validation
+              .nomSignataireOperateur ||
+            validationLocale.nomOperateur,
+
+          nomVoyageur:
+            entete.validation
+              .nomSignataireVoyageur ||
+            validationLocale.nomVoyageur ||
+            voyageurNom,
+
+          accordVoyageur:
+            entete.validation
+              .accordVoyageur ||
+            validationLocale.accordVoyageur,
+
+          observationsFinales:
+            entete.validation
+              .observationsVoyageur ||
+            validationLocale
+              .observationsFinales,
+
+          signatureVoyageur:
+            urlSignatureVoyageur ||
+            validationLocale
+              .signatureVoyageur,
+
+          signatureOperateur:
+            urlSignatureOperateur ||
+            validationLocale
+              .signatureOperateur,
+
+          dateSignatureVoyageur:
+            entete.validation
+              .dateSignatureVoyageur ||
+            validationLocale
+              .dateSignatureVoyageur,
+
+          dateSignatureOperateur:
+            entete.validation
+              .dateSignatureOperateur ||
+            validationLocale
+              .dateSignatureOperateur,
+        };
+
+        const fiche =
+          normaliserEtatDesLieux({
+            ...local,
+
+            id: entete.id,
+
+            missionId:
+              entete.missionId ||
+              entete.id,
+
+            logementId:
+              entete.logementId,
+
+            logementNom,
+            typeLogement,
+            superficie,
+            nombreChambres,
+            adresseLogement,
+
+            voyageurId:
+              entete.voyageurId,
+
+            voyageurNom,
+
+            voyageurTelephone:
+              texte(
+                voyageurSnapshot.telephone
+              ) ||
+              texte(
+                local.voyageurTelephone
+              ),
+
+            voyageurEmail:
+              texte(
+                voyageurSnapshot.email
+              ) ||
+              texte(local.voyageurEmail),
+
+            type: entete.type,
+            statut: entete.statut,
+
+            date:
+              datePrevue.date ||
+              texte(local.date),
+
+            heure:
+              datePrevue.heure ||
+              texte(local.heure),
+
+            notesPreparation:
+              entete.notesPreparation,
+
+            etatGeneral:
+              entete.etatGeneral,
+
+            proprete:
+              entete.proprete,
+
+            observationsGenerales:
+              entete.observationsGenerales,
+
+            compteurs,
+            cles,
+            zones: zonesFinales,
+
+            validation:
+              validationFinale,
+
+            dateDebut:
+              entete.dateDebut,
+
+            dateFin:
+              entete.dateFin,
+
+            dateSignature:
+              texte(local.dateSignature),
+
+            dateCreation:
+              entete.createdAt,
+
+            dateModification:
+              entete.updatedAt,
+          });
+
+        if (!actif) {
+          return;
+        }
+
+        setOrganizationId(orgId);
+        setSignatureVoyageurPath(
+          entete.validation
+            .signatureVoyageurPath
+        );
+        setSignatureOperateurPath(
+          entete.validation
+            .signatureOperateurPath
+        );
+        setEtat(fiche);
+        setSynchronisationActive(true);
+      } catch (erreur) {
+        if (!actif) {
+          return;
+        }
+
+        setErreurSauvegarde(
+          `Impossible de charger cet état des lieux depuis Supabase : ${messageErreur(
+            erreur
+          )}`
+        );
+
+        setIntrouvable(true);
+      } finally {
+        if (actif) {
+          setChargement(false);
+        }
+      }
+    }
+
+    void chargerFiche();
+
+    return () => {
+      actif = false;
+    };
+  }, [missionId]);
+
+  async function enregistrerModifications() {
+    if (
+      !etat ||
+      !organizationId ||
+      !synchronisationActive ||
+      sauvegardeEnCours
+    ) {
+      return;
+    }
+
+    setSauvegardeEnCours(true);
+    setErreurSauvegarde("");
+    setMessageSauvegarde("");
+
+    try {
+      let nouveauSignatureVoyageurPath =
+        signatureVoyageurPath;
+
+      let nouveauSignatureOperateurPath =
+        signatureOperateurPath;
+
+      let signatureVoyageurAffichee =
+        etat.validation.signatureVoyageur;
+
+      let signatureOperateurAffichee =
+        etat.validation.signatureOperateur;
+
+      let dateSignatureVoyageur =
+        etat.validation
+          .dateSignatureVoyageur;
+
+      let dateSignatureOperateur =
+        etat.validation
+          .dateSignatureOperateur;
+
+      const maintenant =
+        new Date().toISOString();
+
+      if (
+        etat.validation.signatureVoyageur
+          .startsWith("data:image/")
+      ) {
+        const resultat =
+          await televerserSignatureEdl(
+            organizationId,
+            etat.id,
+            "voyageur",
+            etat.validation
+              .signatureVoyageur
+          );
+
+        nouveauSignatureVoyageurPath =
+          resultat.storagePath;
+
+        signatureVoyageurAffichee =
+          resultat.url;
+
+        if (!dateSignatureVoyageur) {
+          dateSignatureVoyageur =
+            maintenant;
+        }
+      } else if (
+        !etat.validation.signatureVoyageur &&
+        signatureVoyageurPath
+      ) {
+        await supprimerSignatureEdl(
+          signatureVoyageurPath
+        );
+
+        nouveauSignatureVoyageurPath =
+          "";
+        signatureVoyageurAffichee =
+          "";
+        dateSignatureVoyageur =
+          "";
+      } else if (
+        etat.validation.signatureVoyageur &&
+        !dateSignatureVoyageur
+      ) {
+        dateSignatureVoyageur =
+          maintenant;
+      }
+
+      if (
+        etat.validation.signatureOperateur
+          .startsWith("data:image/")
+      ) {
+        const resultat =
+          await televerserSignatureEdl(
+            organizationId,
+            etat.id,
+            "operateur",
+            etat.validation
+              .signatureOperateur
+          );
+
+        nouveauSignatureOperateurPath =
+          resultat.storagePath;
+
+        signatureOperateurAffichee =
+          resultat.url;
+
+        if (!dateSignatureOperateur) {
+          dateSignatureOperateur =
+            maintenant;
+        }
+      } else if (
+        !etat.validation.signatureOperateur &&
+        signatureOperateurPath
+      ) {
+        await supprimerSignatureEdl(
+          signatureOperateurPath
+        );
+
+        nouveauSignatureOperateurPath =
+          "";
+        signatureOperateurAffichee =
+          "";
+        dateSignatureOperateur =
+          "";
+      } else if (
+        etat.validation.signatureOperateur &&
+        !dateSignatureOperateur
+      ) {
+        dateSignatureOperateur =
+          maintenant;
+      }
+
+      const validationSauvegardee:
+        DonneesValidation = {
+        ...etat.validation,
+        signatureVoyageur:
+          signatureVoyageurAffichee,
+        signatureOperateur:
+          signatureOperateurAffichee,
+        dateSignatureVoyageur,
+        dateSignatureOperateur,
+      };
+
+      const zones = etat.zones.map(
+        (zone, index) => ({
+          id: zone.id,
+          nom: zone.nom,
+          ordre: index,
+          etat: zone.etat,
+          observations: zone.observations,
+        })
+      );
+
+      const releves = [
+        {
+          typeCompteur: "electricite",
+          numero: etat.compteurs.electricite.numero,
+          valeur: etat.compteurs.electricite.index,
+        },
+        {
+          typeCompteur: "eau_froide",
+          numero: etat.compteurs.eauFroide.numero,
+          valeur: etat.compteurs.eauFroide.index,
+        },
+        {
+          typeCompteur: "eau_chaude",
+          numero: etat.compteurs.eauChaude.numero,
+          valeur: etat.compteurs.eauChaude.index,
+        },
+        {
+          typeCompteur: "gaz",
+          numero: etat.compteurs.gaz.numero,
+          valeur: etat.compteurs.gaz.index,
+        },
+      ];
+
+      const cles = [
+        {
+          libelle: "Jeux de clés",
+          quantite: etat.cles.nombreJeux,
+          observations: etat.cles.observations,
+        },
+        {
+          libelle: "Badges",
+          quantite: etat.cles.nombreBadges,
+        },
+        {
+          libelle: "Télécommandes",
+          quantite: etat.cles.nombreTelecommandes,
+        },
+      ];
+
+      await Promise.all([
+        sauvegarderEnteteEdl(
+          organizationId,
+          etat.id,
+          {
+            statut: etat.statut,
+            notesPreparation: etat.notesPreparation,
+            etatGeneral: etat.etatGeneral,
+            proprete: etat.proprete,
+            observationsGenerales: etat.observationsGenerales,
+            dateDebut: etat.dateDebut,
+            dateFin: etat.dateFin,
+          }
+        ),
+        sauvegarderZonesEdl(
+          organizationId,
+          etat.id,
+          zones
+        ),
+        sauvegarderRelevesEdl(
+          organizationId,
+          etat.id,
+          releves
+        ),
+        sauvegarderClesEdl(
+          organizationId,
+          etat.id,
+          cles
+        ),
+        sauvegarderValidationEdl(
+          organizationId,
+          etat.id,
+          {
+            nomSignataireVoyageur:
+              validationSauvegardee
+                .nomVoyageur,
+            accordVoyageur:
+              validationSauvegardee
+                .accordVoyageur,
+            observationsVoyageur:
+              validationSauvegardee
+                .observationsFinales,
+            signatureVoyageurPath:
+              nouveauSignatureVoyageurPath,
+            dateSignatureVoyageur:
+              validationSauvegardee
+                .dateSignatureVoyageur,
+            operateurUserId: "",
+            nomSignataireOperateur:
+              validationSauvegardee
+                .nomOperateur,
+            signatureOperateurPath:
+              nouveauSignatureOperateurPath,
+            dateSignatureOperateur:
+              validationSauvegardee
+                .dateSignatureOperateur,
+          }
+        ),
+      ]);
+
+      const photosDistantes =
+        etat.zones.flatMap(
+          (zone) =>
+            zone.photos.filter(
+              (photo) =>
+                Boolean(photo.storagePath)
+            )
+        );
+
+      await Promise.all(
+        photosDistantes.map(
+          (photo) =>
+            modifierCommentairePhotoEdl(
+              organizationId,
+              photo.id,
+              photo.annotation
+            )
+        )
+      );
+
+      /*
+       * Photos et signatures restent temporairement
+       * dans le miroir local jusqu'à leur migration
+       * vers Supabase Storage / les colonnes dédiées.
+       */
+      const listeLocale =
+        lire<Record<string, unknown>>(
+          "etatsDesLieux"
+        );
+
+      const versionSauvegardee = {
+        ...etat,
+        validation:
+          validationSauvegardee,
+        dateModification: new Date().toISOString(),
+      };
+
+      const indexLocal = listeLocale.findIndex(
+        (element) =>
+          texte(element.id) === etat.id ||
+          texte(element.missionId) === etat.id ||
+          texte(element.id) === etat.missionId ||
+          texte(element.missionId) === etat.missionId
+      );
+
+      const nouvelleListe = [...listeLocale];
+
+      if (indexLocal >= 0) {
+        nouvelleListe[indexLocal] = versionSauvegardee;
+      } else {
+        nouvelleListe.unshift(versionSauvegardee);
+      }
+
+      window.localStorage.setItem(
+        "cap-serein-etats-des-lieux",
+        JSON.stringify(nouvelleListe)
+      );
+
+      setSignatureVoyageurPath(
+        nouveauSignatureVoyageurPath
+      );
+      setSignatureOperateurPath(
+        nouveauSignatureOperateurPath
+      );
+      setEtat(
+        versionSauvegardee
+      );
+
+      setErreurSauvegarde("");
+      setMessageSauvegarde("✓ Enregistré dans Supabase");
+    } catch (erreur) {
+      setMessageSauvegarde("");
+      setErreurSauvegarde(
+        `Sauvegarde Supabase impossible : ${messageErreur(
+          erreur
+        )}`
+      );
+    } finally {
+      setSauvegardeEnCours(false);
+    }
+  }
 
   const nombrePhotos = useMemo(() => {
     if (!etat) {
@@ -1095,6 +1970,8 @@ export default function FicheEtatDesLieuxPage() {
   function modifierEtat(
     modification: Partial<EtatDesLieux>
   ) {
+    setMessageSauvegarde("");
+
     setEtat((valeur) =>
       valeur
         ? {
@@ -1281,6 +2158,8 @@ export default function FicheEtatDesLieuxPage() {
   ) {
     if (
       !etat ||
+      !organizationId ||
+      !synchronisationActive ||
       fichiers.length === 0
     ) {
       return;
@@ -1288,10 +2167,37 @@ export default function FicheEtatDesLieuxPage() {
 
     setTraitementPhoto(true);
     setErreurPhoto("");
+    setMessageSauvegarde("");
 
     try {
+      /*
+       * La zone doit exister dans Supabase
+       * avant qu'une photo puisse la référencer.
+       */
+      await sauvegarderZonesEdl(
+        organizationId,
+        etat.id,
+        etat.zones.map(
+          (zone, index) => ({
+            id: zone.id,
+            nom: zone.nom,
+            ordre: index,
+            etat: zone.etat,
+            observations: zone.observations,
+          })
+        )
+      );
+
       const nouvellesPhotos:
         PhotoEtatDesLieux[] = [];
+
+      const zoneActuelle =
+        etat.zones.find(
+          (zone) => zone.id === zoneId
+        );
+
+      const ordreInitial =
+        zoneActuelle?.photos.length || 0;
 
       for (const fichier of fichiers) {
         if (
@@ -1307,44 +2213,67 @@ export default function FicheEtatDesLieuxPage() {
             fichier
           );
 
+        const photoDistante =
+          await televerserPhotoEdl(
+            organizationId,
+            etat.id,
+            zoneId,
+            {
+              dataUrl,
+              nomFichier:
+                fichier.name ||
+                "Photo état des lieux.jpg",
+              commentaire: "",
+              ordre:
+                ordreInitial +
+                nouvellesPhotos.length,
+              datePriseVue:
+                new Date().toISOString(),
+            }
+          );
+
         nouvellesPhotos.push({
-          id: creerIdentifiant("photo"),
-          dataUrl,
-
-          nom:
-            fichier.name ||
-            "Photo état des lieux",
-
-          annotation: "",
-
+          id: photoDistante.id,
+          dataUrl: photoDistante.url,
+          nom: photoDistante.nomFichier,
+          annotation:
+            photoDistante.commentaire,
           dateAjout:
-            new Date().toISOString(),
-
+            photoDistante.datePriseVue,
           source,
-
           tailleOriginale:
-            fichier.size,
+            photoDistante.tailleOctets,
+          storagePath:
+            photoDistante.storagePath,
         });
       }
 
-      modifierEtat({
-        zones: etat.zones.map((zone) =>
-          zone.id === zoneId
-            ? {
-                ...zone,
-                photos: [
-                  ...zone.photos,
-                  ...nouvellesPhotos,
-                ],
-              }
-            : zone
-        ),
-      });
+      if (nouvellesPhotos.length > 0) {
+        modifierEtat({
+          zones: etat.zones.map((zone) =>
+            zone.id === zoneId
+              ? {
+                  ...zone,
+                  photos: [
+                    ...zone.photos,
+                    ...nouvellesPhotos,
+                  ],
+                }
+              : zone
+          ),
+        });
+
+        setMessageSauvegarde(
+          nouvellesPhotos.length === 1
+            ? "✓ Photo enregistrée dans Supabase"
+            : `✓ ${nouvellesPhotos.length} photos enregistrées dans Supabase`
+        );
+      }
     } catch (erreur) {
       setErreurPhoto(
-        erreur instanceof Error
-          ? erreur.message
-          : "Impossible d’ajouter la photo."
+        `Envoi de la photo impossible : ${messageErreur(
+          erreur
+        )}`
       );
     } finally {
       setTraitementPhoto(false);
@@ -1378,7 +2307,7 @@ export default function FicheEtatDesLieuxPage() {
     });
   }
 
-  function supprimerPhoto(
+  async function supprimerPhoto(
     zoneId: string,
     photoId: string
   ) {
@@ -1391,20 +2320,61 @@ export default function FicheEtatDesLieuxPage() {
 
     if (!confirmation) return;
 
-    modifierEtat({
-      zones: etat.zones.map((zone) =>
-        zone.id === zoneId
-          ? {
-              ...zone,
+    const zone = etat.zones.find(
+      (element) => element.id === zoneId
+    );
 
-              photos: zone.photos.filter(
-                (photo) =>
-                  photo.id !== photoId
-              ),
-            }
-          : zone
-      ),
-    });
+    const photo = zone?.photos.find(
+      (element) => element.id === photoId
+    );
+
+    if (!photo) {
+      return;
+    }
+
+    setTraitementPhoto(true);
+    setErreurPhoto("");
+    setMessageSauvegarde("");
+
+    try {
+      if (
+        photo.storagePath &&
+        organizationId
+      ) {
+        await supprimerPhotoEdl(
+          organizationId,
+          photo.id,
+          photo.storagePath
+        );
+      }
+
+      modifierEtat({
+        zones: etat.zones.map((zone) =>
+          zone.id === zoneId
+            ? {
+                ...zone,
+
+                photos: zone.photos.filter(
+                  (element) =>
+                    element.id !== photoId
+                ),
+              }
+            : zone
+        ),
+      });
+
+      setMessageSauvegarde(
+        "✓ Photo supprimée"
+      );
+    } catch (erreur) {
+      setErreurPhoto(
+        `Suppression de la photo impossible : ${messageErreur(
+          erreur
+        )}`
+      );
+    } finally {
+      setTraitementPhoto(false);
+    }
   }
 
   function ajouterZone() {
@@ -1419,7 +2389,7 @@ export default function FicheEtatDesLieuxPage() {
       zones: [
         ...etat.zones,
         {
-          id: creerIdentifiant("zone"),
+          id: nouvelUuidEdl(),
           nom,
           etat: "non_verifie",
           observations: "",
@@ -1592,21 +2562,45 @@ export default function FicheEtatDesLieuxPage() {
           </p>
         </div>
 
-        <button
-          type="button"
-          onClick={actionPrincipale}
-          disabled={
-            etat.statut === "signe"
-          }
-          className="min-h-14 w-full rounded-2xl bg-blue-600 px-6 py-3 font-black text-white shadow-lg shadow-blue-600/25 transition hover:bg-blue-700 disabled:cursor-not-allowed disabled:bg-violet-600 xl:w-auto"
-        >
-          {texteAction}
-        </button>
+        <div className="flex w-full flex-col gap-3 sm:flex-row xl:w-auto">
+          <button
+            type="button"
+            onClick={() => {
+              void enregistrerModifications();
+            }}
+            disabled={
+              sauvegardeEnCours ||
+              !synchronisationActive
+            }
+            className="min-h-14 w-full rounded-2xl bg-emerald-600 px-6 py-3 font-black text-white shadow-lg transition hover:bg-emerald-700 disabled:cursor-not-allowed disabled:opacity-50 xl:w-auto"
+          >
+            {sauvegardeEnCours
+              ? "Enregistrement..."
+              : "💾 Enregistrer"}
+          </button>
+
+          <button
+            type="button"
+            onClick={actionPrincipale}
+            disabled={
+              etat.statut === "signe"
+            }
+            className="min-h-14 w-full rounded-2xl bg-blue-600 px-6 py-3 font-black text-white shadow-lg shadow-blue-600/25 transition hover:bg-blue-700 disabled:cursor-not-allowed disabled:bg-violet-600 xl:w-auto"
+          >
+            {texteAction}
+          </button>
+        </div>
       </div>
 
       {erreurSauvegarde && (
         <div className="rounded-2xl border border-red-200 bg-red-50 px-5 py-4 text-sm font-bold leading-6 text-red-700">
           {erreurSauvegarde}
+        </div>
+      )}
+
+      {messageSauvegarde && (
+        <div className="rounded-2xl border border-emerald-200 bg-emerald-50 px-5 py-4 text-sm font-bold leading-6 text-emerald-800">
+          {messageSauvegarde}
         </div>
       )}
 
@@ -2097,19 +3091,22 @@ export default function FicheEtatDesLieuxPage() {
                               {photo.source ===
                               "camera"
                                 ? "📷 Caméra"
-                                : "🖼️ Galerie"}
+                                : photo.source ===
+                                    "supabase"
+                                  ? "☁️ Supabase"
+                                  : "🖼️ Galerie"}
                             </span>
 
                             {etat.statut !==
                               "signe" && (
                               <button
                                 type="button"
-                                onClick={() =>
-                                  supprimerPhoto(
+                                onClick={() => {
+                                  void supprimerPhoto(
                                     zone.id,
                                     photo.id
-                                  )
-                                }
+                                  );
+                                }}
                                 className="min-h-10 rounded-xl bg-red-50 px-3 text-xs font-black text-red-700"
                               >
                                 Supprimer
@@ -2330,9 +3327,21 @@ export default function FicheEtatDesLieuxPage() {
           ← Étape précédente
         </button>
 
-        <p className="text-center text-xs font-bold text-slate-500">
-          Sauvegarde automatique
-        </p>
+        <button
+          type="button"
+          onClick={() => {
+            void enregistrerModifications();
+          }}
+          disabled={
+            sauvegardeEnCours ||
+            !synchronisationActive
+          }
+          className="min-h-12 rounded-2xl bg-emerald-600 px-5 py-3 font-black text-white transition hover:bg-emerald-700 disabled:cursor-not-allowed disabled:opacity-50"
+        >
+          {sauvegardeEnCours
+            ? "Enregistrement..."
+            : "💾 Enregistrer les modifications"}
+        </button>
 
         <button
           type="button"

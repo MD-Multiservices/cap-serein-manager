@@ -1,10 +1,20 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import {
+  useEffect,
+  useMemo,
+  useState,
+} from "react";
 
 import PageHeader from "@/components/ui/PageHeader";
 import Section from "@/components/ui/Section";
-import { enregistrer, lire } from "@/lib/database";
+
+import {
+  enregistrer,
+  lire,
+} from "@/lib/database";
+
+import { supabase } from "@/lib/supabase";
 
 import type {
   Mission,
@@ -16,7 +26,8 @@ import type {
 type Logement = {
   id: string;
   nom: string;
-  ville?: string;
+  ville: string;
+  proprietaireId: string;
 };
 
 type Voyageur = {
@@ -25,9 +36,54 @@ type Voyageur = {
   nom: string;
 };
 
-type FiltreStatut = "Tous" | StatutMission;
-type FiltrePriorite = "Toutes" | PrioriteMission;
-type FiltreType = "Tous" | TypeMission;
+type LogementLocal = {
+  id?: string;
+  nom?: string;
+  ville?: string;
+  proprietaireId?: string;
+};
+
+type VoyageurLocal = {
+  id?: string;
+  prenom?: string;
+  nom?: string;
+};
+
+type MissionSupabase = {
+  id: string;
+
+  logement_id: string | null;
+  proprietaire_id: string | null;
+  voyageur_id: string | null;
+
+  type_mission: string | null;
+
+  titre: string | null;
+  description: string | null;
+
+  date_mission: string | null;
+  heure_mission: string | null;
+
+  priorite: string | null;
+  statut: string | null;
+
+  assigne_a: string | null;
+
+  created_at: string | null;
+  updated_at: string | null;
+};
+
+type FiltreStatut =
+  | "Tous"
+  | StatutMission;
+
+type FiltrePriorite =
+  | "Toutes"
+  | PrioriteMission;
+
+type FiltreType =
+  | "Tous"
+  | TypeMission;
 
 const typesMission: TypeMission[] = [
   "Arrivée",
@@ -57,7 +113,8 @@ const prioritesMission: PrioriteMission[] = [
 ];
 
 function creerMissionVide(): Mission {
-  const maintenant = new Date().toISOString();
+  const maintenant =
+    new Date().toISOString();
 
   return {
     id: "",
@@ -90,259 +147,1546 @@ function creerIdentifiant(): string {
     .slice(2, 10)}`;
 }
 
-function normaliserTexte(texte: string): string {
+function estUuid(
+  valeur: string
+): boolean {
+  return /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(
+    valeur
+  );
+}
+
+function normaliserTexte(
+  texte: string
+): string {
   return texte
     .normalize("NFD")
-    .replace(/[\u0300-\u036f]/g, "")
+    .replace(
+      /[\u0300-\u036f]/g,
+      ""
+    )
     .toLowerCase()
     .trim();
 }
 
+function normaliserType(
+  valeur: unknown
+): TypeMission {
+  if (
+    valeur === "Arrivée" ||
+    valeur === "Départ" ||
+    valeur === "État des lieux entrée" ||
+    valeur === "État des lieux sortie" ||
+    valeur === "Remise des clés" ||
+    valeur === "Récupération des clés" ||
+    valeur === "Ménage" ||
+    valeur === "Pressing" ||
+    valeur === "Maintenance" ||
+    valeur === "Intervention"
+  ) {
+    return valeur;
+  }
+
+  return "Intervention";
+}
+
+function normaliserStatut(
+  valeur: unknown
+): StatutMission {
+  if (
+    valeur === "À faire" ||
+    valeur === "En cours" ||
+    valeur === "Terminée" ||
+    valeur === "Annulée"
+  ) {
+    return valeur;
+  }
+
+  return "À faire";
+}
+
+function normaliserPriorite(
+  valeur: unknown
+): PrioriteMission {
+  if (
+    valeur === "Basse" ||
+    valeur === "Normale" ||
+    valeur === "Haute" ||
+    valeur === "Urgente"
+  ) {
+    return valeur;
+  }
+
+  return "Normale";
+}
+
+function normaliserHeure(
+  valeur: unknown
+): string {
+  const texte = String(
+    valeur || ""
+  );
+
+  if (
+    /^\d{2}:\d{2}/.test(texte)
+  ) {
+    return texte.slice(0, 5);
+  }
+
+  return "";
+}
+
+function normaliserMissionLocale(
+  valeur: Partial<Mission>
+): Mission {
+  const maintenant =
+    new Date().toISOString();
+
+  return {
+    ...creerMissionVide(),
+    ...valeur,
+
+    id: String(
+      valeur.id ||
+        creerIdentifiant()
+    ),
+
+    logementId: String(
+      valeur.logementId || ""
+    ),
+
+    proprietaireId: String(
+      valeur.proprietaireId || ""
+    ),
+
+    voyageurId: String(
+      valeur.voyageurId || ""
+    ),
+
+    type:
+      normaliserType(
+        valeur.type
+      ),
+
+    titre: String(
+      valeur.titre || ""
+    ),
+
+    description: String(
+      valeur.description || ""
+    ),
+
+    date: String(
+      valeur.date || ""
+    ),
+
+    heure:
+      normaliserHeure(
+        valeur.heure
+      ),
+
+    priorite:
+      normaliserPriorite(
+        valeur.priorite
+      ),
+
+    statut:
+      normaliserStatut(
+        valeur.statut
+      ),
+
+    assigneA: String(
+      valeur.assigneA || ""
+    ),
+
+    createdAt: String(
+      valeur.createdAt ||
+        maintenant
+    ),
+
+    updatedAt: String(
+      valeur.updatedAt ||
+        maintenant
+    ),
+  };
+}
+
 export default function MissionsPage() {
-  const [missions, setMissions] = useState<Mission[]>([]);
-  const [logements, setLogements] = useState<Logement[]>([]);
-  const [voyageurs, setVoyageurs] = useState<Voyageur[]>([]);
+  const [
+    organizationId,
+    setOrganizationId,
+  ] = useState("");
 
-  const [missionEnCours, setMissionEnCours] =
-    useState<Mission>(creerMissionVide());
+  const [
+    missions,
+    setMissions,
+  ] = useState<Mission[]>([]);
 
-  const [formulaireOuvert, setFormulaireOuvert] = useState(false);
-  const [donneesChargees, setDonneesChargees] = useState(false);
-  const [erreur, setErreur] = useState("");
+  const [
+    logements,
+    setLogements,
+  ] = useState<Logement[]>([]);
 
-  const [recherche, setRecherche] = useState("");
-  const [filtreStatut, setFiltreStatut] =
-    useState<FiltreStatut>("Tous");
-  const [filtrePriorite, setFiltrePriorite] =
-    useState<FiltrePriorite>("Toutes");
-  const [filtreType, setFiltreType] =
-    useState<FiltreType>("Tous");
+  const [
+    voyageurs,
+    setVoyageurs,
+  ] = useState<Voyageur[]>([]);
+
+  const [
+    missionEnCours,
+    setMissionEnCours,
+  ] = useState<Mission>(
+    creerMissionVide()
+  );
+
+  const [
+    formulaireOuvert,
+    setFormulaireOuvert,
+  ] = useState(false);
+
+  const [
+    donneesChargees,
+    setDonneesChargees,
+  ] = useState(false);
+
+  const [
+    sauvegardeEnCours,
+    setSauvegardeEnCours,
+  ] = useState(false);
+
+  const [
+    suppressionEnCours,
+    setSuppressionEnCours,
+  ] = useState("");
+
+  const [
+    statutEnCours,
+    setStatutEnCours,
+  ] = useState("");
+
+  const [
+    erreur,
+    setErreur,
+  ] = useState("");
+
+  const [
+    erreurPage,
+    setErreurPage,
+  ] = useState("");
+
+  const [
+    message,
+    setMessage,
+  ] = useState("");
+
+  const [
+    recherche,
+    setRecherche,
+  ] = useState("");
+
+  const [
+    filtreStatut,
+    setFiltreStatut,
+  ] =
+    useState<FiltreStatut>(
+      "Tous"
+    );
+
+  const [
+    filtrePriorite,
+    setFiltrePriorite,
+  ] =
+    useState<FiltrePriorite>(
+      "Toutes"
+    );
+
+  const [
+    filtreType,
+    setFiltreType,
+  ] =
+    useState<FiltreType>(
+      "Tous"
+    );
 
   useEffect(() => {
-    setMissions(lire<Mission>("missions"));
-    setLogements(lire<Logement>("logements"));
-    setVoyageurs(lire<Voyageur>("voyageurs"));
-    setDonneesChargees(true);
+    let actif = true;
+
+    async function initialiser() {
+      try {
+        setDonneesChargees(
+          false
+        );
+
+        setErreurPage("");
+
+        const {
+          data: { user },
+          error:
+            erreurUtilisateur,
+        } =
+          await supabase.auth.getUser();
+
+        if (
+          erreurUtilisateur ||
+          !user
+        ) {
+          throw new Error(
+            "Votre session Supabase n’est pas disponible."
+          );
+        }
+
+        const {
+          data: adhesion,
+          error:
+            erreurAdhesion,
+        } = await supabase
+          .from(
+            "organization_members"
+          )
+          .select(
+            "organization_id"
+          )
+          .eq(
+            "user_id",
+            user.id
+          )
+          .limit(1)
+          .maybeSingle();
+
+        if (erreurAdhesion) {
+          throw erreurAdhesion;
+        }
+
+        if (
+          !adhesion?.organization_id
+        ) {
+          throw new Error(
+            "Aucune organisation Cap Serein n’est associée à votre compte."
+          );
+        }
+
+        if (!actif) {
+          return;
+        }
+
+        const orgId =
+          adhesion.organization_id;
+
+        setOrganizationId(
+          orgId
+        );
+
+        const [
+          logementsDistants,
+          voyageursDistants,
+        ] =
+          await Promise.all([
+            chargerLogements(
+              orgId
+            ),
+
+            chargerVoyageurs(
+              orgId
+            ),
+          ]);
+
+        if (!actif) {
+          return;
+        }
+
+        setLogements(
+          logementsDistants
+        );
+
+        setVoyageurs(
+          voyageursDistants
+        );
+
+        const migrationEffectuee =
+          await chargerMissions(
+            orgId,
+            logementsDistants,
+            voyageursDistants,
+            true
+          );
+
+        if (
+          actif &&
+          migrationEffectuee
+        ) {
+          setMessage(
+            "Vos anciennes missions enregistrées sur cet ordinateur ont été importées dans Supabase."
+          );
+        }
+      } catch (error) {
+        console.error(error);
+
+        if (actif) {
+          setErreurPage(
+            error instanceof Error
+              ? error.message
+              : "Impossible de charger les missions."
+          );
+        }
+      } finally {
+        if (actif) {
+          setDonneesChargees(
+            true
+          );
+        }
+      }
+    }
+
+    initialiser();
+
+    return () => {
+      actif = false;
+    };
   }, []);
 
+  /*
+   * Supabase est maintenant la source principale.
+   *
+   * On conserve une copie locale temporaire
+   * pour Planning et États des lieux tant que
+   * ces modules ne sont pas encore migrés.
+   */
   useEffect(() => {
-    if (!donneesChargees) return;
+    if (
+      !donneesChargees
+    ) {
+      return;
+    }
 
-    enregistrer("missions", missions);
-  }, [missions, donneesChargees]);
-
-  const statistiques = useMemo(() => {
-    return {
-      total: missions.length,
-      aFaire: missions.filter(
-        (mission) => mission.statut === "À faire"
-      ).length,
-      enCours: missions.filter(
-        (mission) => mission.statut === "En cours"
-      ).length,
-      urgentes: missions.filter(
-        (mission) =>
-          mission.priorite === "Urgente" &&
-          mission.statut !== "Terminée" &&
-          mission.statut !== "Annulée"
-      ).length,
-      terminees: missions.filter(
-        (mission) => mission.statut === "Terminée"
-      ).length,
-    };
-  }, [missions]);
-
-  const missionsFiltrees = useMemo(() => {
-    const rechercheNormalisee = normaliserTexte(recherche);
-
-    return missions
-      .filter((mission) => {
-        if (
-          filtreStatut !== "Tous" &&
-          mission.statut !== filtreStatut
-        ) {
-          return false;
-        }
-
-        if (
-          filtrePriorite !== "Toutes" &&
-          mission.priorite !== filtrePriorite
-        ) {
-          return false;
-        }
-
-        if (
-          filtreType !== "Tous" &&
-          mission.type !== filtreType
-        ) {
-          return false;
-        }
-
-        if (!rechercheNormalisee) return true;
-
-        const logement = logements.find(
-          (item) => item.id === mission.logementId
-        );
-
-        const voyageur = voyageurs.find(
-          (item) => item.id === mission.voyageurId
-        );
-
-        const contenu = [
-          mission.titre,
-          mission.description,
-          mission.type,
-          mission.assigneA,
-          mission.date,
-          logement?.nom || "",
-          logement?.ville || "",
-          voyageur?.prenom || "",
-          voyageur?.nom || "",
-        ]
-          .map((valeur) =>
-            normaliserTexte(String(valeur || ""))
-          )
-          .join(" ");
-
-        return contenu.includes(rechercheNormalisee);
-      })
-      .sort((a, b) => {
-        const dateA = `${a.date || "9999-12-31"} ${
-          a.heure || "23:59"
-        }`;
-
-        const dateB = `${b.date || "9999-12-31"} ${
-          b.heure || "23:59"
-        }`;
-
-        return dateA.localeCompare(dateB);
-      });
+    enregistrer(
+      "missions",
+      missions
+    );
   }, [
     missions,
-    logements,
-    voyageurs,
-    recherche,
-    filtreStatut,
-    filtrePriorite,
-    filtreType,
+    donneesChargees,
   ]);
 
-  function nomLogement(id: string): string {
-    const logement = logements.find((item) => item.id === id);
+  async function chargerLogements(
+    orgId: string
+  ): Promise<Logement[]> {
+    const {
+      data,
+      error,
+    } = await supabase
+      .from("logements")
+      .select(
+        `
+          id,
+          nom,
+          ville,
+          proprietaire_id
+        `
+      )
+      .eq(
+        "organization_id",
+        orgId
+      )
+      .eq(
+        "actif",
+        true
+      )
+      .order(
+        "nom",
+        {
+          ascending: true,
+        }
+      );
 
-    if (!logement) return "Aucun logement";
+    if (error) {
+      throw error;
+    }
+
+    return (
+      data || []
+    ).map(
+      (ligne): Logement => ({
+        id: String(
+          ligne.id
+        ),
+
+        nom: String(
+          ligne.nom || ""
+        ),
+
+        ville: String(
+          ligne.ville || ""
+        ),
+
+        proprietaireId:
+          String(
+            ligne.proprietaire_id ||
+              ""
+          ),
+      })
+    );
+  }
+
+  async function chargerVoyageurs(
+    orgId: string
+  ): Promise<Voyageur[]> {
+    const {
+      data,
+      error,
+    } = await supabase
+      .from("voyageurs")
+      .select(
+        `
+          id,
+          prenom,
+          nom
+        `
+      )
+      .eq(
+        "organization_id",
+        orgId
+      )
+      .order(
+        "nom",
+        {
+          ascending: true,
+        }
+      );
+
+    if (error) {
+      throw error;
+    }
+
+    return (
+      data || []
+    ).map(
+      (ligne): Voyageur => ({
+        id: String(
+          ligne.id
+        ),
+
+        prenom: String(
+          ligne.prenom || ""
+        ),
+
+        nom: String(
+          ligne.nom || ""
+        ),
+      })
+    );
+  }
+
+  async function chargerMissions(
+    orgId: string,
+    logementsDistants: Logement[],
+    voyageursDistants: Voyageur[],
+    autoriserMigration: boolean
+  ): Promise<boolean> {
+    const {
+      data,
+      error,
+    } = await supabase
+      .from("missions")
+      .select(
+        `
+          id,
+          logement_id,
+          proprietaire_id,
+          voyageur_id,
+          type_mission,
+          titre,
+          description,
+          date_mission,
+          heure_mission,
+          priorite,
+          statut,
+          assigne_a,
+          created_at,
+          updated_at
+        `
+      )
+      .eq(
+        "organization_id",
+        orgId
+      )
+      .order(
+        "date_mission",
+        {
+          ascending: true,
+        }
+      );
+
+    if (error) {
+      throw error;
+    }
+
+    const lignes =
+      (data ||
+        []) as MissionSupabase[];
+
+    if (
+      autoriserMigration &&
+      lignes.length === 0
+    ) {
+      const missionsLocales =
+        lire<
+          Partial<Mission>
+        >("missions")
+          .map(
+            normaliserMissionLocale
+          )
+          .filter(
+            (mission) =>
+              mission.titre.trim() !==
+              ""
+          );
+
+      if (
+        missionsLocales.length >
+        0
+      ) {
+        const logementsLocaux =
+          lire<LogementLocal>(
+            "logements"
+          );
+
+        const voyageursLocaux =
+          lire<VoyageurLocal>(
+            "voyageurs"
+          );
+
+        await importerMissionsLocales(
+          orgId,
+          missionsLocales,
+          logementsLocaux,
+          voyageursLocaux,
+          logementsDistants,
+          voyageursDistants
+        );
+
+        await chargerMissions(
+          orgId,
+          logementsDistants,
+          voyageursDistants,
+          false
+        );
+
+        return true;
+      }
+    }
+
+    const missionsConverties =
+      lignes.map(
+        (
+          ligne
+        ): Mission => ({
+          id:
+            ligne.id,
+
+          logementId:
+            String(
+              ligne.logement_id ||
+                ""
+            ),
+
+          proprietaireId:
+            String(
+              ligne.proprietaire_id ||
+                ""
+            ),
+
+          voyageurId:
+            String(
+              ligne.voyageur_id ||
+                ""
+            ),
+
+          type:
+            normaliserType(
+              ligne.type_mission
+            ),
+
+          titre:
+            String(
+              ligne.titre || ""
+            ),
+
+          description:
+            String(
+              ligne.description ||
+                ""
+            ),
+
+          date:
+            String(
+              ligne.date_mission ||
+                ""
+            ),
+
+          heure:
+            normaliserHeure(
+              ligne.heure_mission
+            ),
+
+          priorite:
+            normaliserPriorite(
+              ligne.priorite
+            ),
+
+          statut:
+            normaliserStatut(
+              ligne.statut
+            ),
+
+          assigneA:
+            String(
+              ligne.assigne_a ||
+                ""
+            ),
+
+          createdAt:
+            String(
+              ligne.created_at ||
+                ""
+            ),
+
+          updatedAt:
+            String(
+              ligne.updated_at ||
+                ""
+            ),
+        })
+      );
+
+    setMissions(
+      missionsConverties
+    );
+
+    return false;
+  }
+
+  function trouverLogementDistant(
+    idLocal: string,
+    logementsLocaux: LogementLocal[],
+    logementsDistants: Logement[]
+  ): Logement | null {
+    if (!idLocal) {
+      return null;
+    }
+
+    const direct =
+      logementsDistants.find(
+        (item) =>
+          item.id === idLocal
+      );
+
+    if (direct) {
+      return direct;
+    }
+
+    const local =
+      logementsLocaux.find(
+        (item) =>
+          item.id === idLocal
+      );
+
+    if (!local) {
+      return null;
+    }
+
+    const nomLocal =
+      normaliserTexte(
+        String(
+          local.nom || ""
+        )
+      );
+
+    const villeLocale =
+      normaliserTexte(
+        String(
+          local.ville || ""
+        )
+      );
+
+    const exact =
+      logementsDistants.find(
+        (item) =>
+          normaliserTexte(
+            item.nom
+          ) === nomLocal &&
+          normaliserTexte(
+            item.ville
+          ) === villeLocale
+      );
+
+    if (exact) {
+      return exact;
+    }
+
+    const correspondancesNom =
+      logementsDistants.filter(
+        (item) =>
+          normaliserTexte(
+            item.nom
+          ) === nomLocal
+      );
+
+    return correspondancesNom.length ===
+      1
+      ? correspondancesNom[0]
+      : null;
+  }
+
+  function trouverVoyageurDistant(
+    idLocal: string,
+    voyageursLocaux: VoyageurLocal[],
+    voyageursDistants: Voyageur[]
+  ): Voyageur | null {
+    if (!idLocal) {
+      return null;
+    }
+
+    const direct =
+      voyageursDistants.find(
+        (item) =>
+          item.id === idLocal
+      );
+
+    if (direct) {
+      return direct;
+    }
+
+    const local =
+      voyageursLocaux.find(
+        (item) =>
+          item.id === idLocal
+      );
+
+    if (!local) {
+      return null;
+    }
+
+    const prenom =
+      normaliserTexte(
+        String(
+          local.prenom || ""
+        )
+      );
+
+    const nom =
+      normaliserTexte(
+        String(
+          local.nom || ""
+        )
+      );
+
+    const correspondances =
+      voyageursDistants.filter(
+        (item) =>
+          normaliserTexte(
+            item.prenom
+          ) === prenom &&
+          normaliserTexte(
+            item.nom
+          ) === nom
+      );
+
+    return correspondances.length ===
+      1
+      ? correspondances[0]
+      : null;
+  }
+
+  async function importerMissionsLocales(
+    orgId: string,
+    missionsLocales: Mission[],
+    logementsLocaux: LogementLocal[],
+    voyageursLocaux: VoyageurLocal[],
+    logementsDistants: Logement[],
+    voyageursDistants: Voyageur[]
+  ) {
+    for (
+      const mission of missionsLocales
+    ) {
+      const logement =
+        trouverLogementDistant(
+          mission.logementId,
+          logementsLocaux,
+          logementsDistants
+        );
+
+      const voyageur =
+        trouverVoyageurDistant(
+          mission.voyageurId,
+          voyageursLocaux,
+          voyageursDistants
+        );
+
+      const dateDebut =
+        mission.date &&
+        mission.heure
+          ? `${mission.date}T${mission.heure}:00`
+          : null;
+
+      const payload: Record<
+        string,
+        unknown
+      > = {
+        organization_id:
+          orgId,
+
+        logement_id:
+          logement?.id ||
+          null,
+
+        proprietaire_id:
+          logement?.proprietaireId ||
+          null,
+
+        voyageur_id:
+          voyageur?.id ||
+          null,
+
+        type_mission:
+          mission.type,
+
+        titre:
+          mission.titre.trim(),
+
+        description:
+          mission.description.trim() ||
+          null,
+
+        observations:
+          mission.description.trim() ||
+          null,
+
+        date_mission:
+          mission.date ||
+          null,
+
+        heure_mission:
+          mission.heure ||
+          null,
+
+        date_debut:
+          dateDebut,
+
+        priorite:
+          mission.priorite,
+
+        statut:
+          mission.statut,
+
+        assigne_a:
+          mission.assigneA.trim() ||
+          null,
+      };
+
+      if (
+        mission.id &&
+        estUuid(
+          mission.id
+        )
+      ) {
+        payload.id =
+          mission.id;
+      }
+
+      if (
+        mission.createdAt
+      ) {
+        payload.created_at =
+          mission.createdAt;
+      }
+
+      if (
+        mission.updatedAt
+      ) {
+        payload.updated_at =
+          mission.updatedAt;
+      }
+
+      const {
+        error,
+      } = await supabase
+        .from("missions")
+        .insert(payload);
+
+      if (error) {
+        throw error;
+      }
+    }
+  }
+
+  const statistiques =
+    useMemo(() => {
+      return {
+        total:
+          missions.length,
+
+        aFaire:
+          missions.filter(
+            (mission) =>
+              mission.statut ===
+              "À faire"
+          ).length,
+
+        enCours:
+          missions.filter(
+            (mission) =>
+              mission.statut ===
+              "En cours"
+          ).length,
+
+        urgentes:
+          missions.filter(
+            (mission) =>
+              mission.priorite ===
+                "Urgente" &&
+              mission.statut !==
+                "Terminée" &&
+              mission.statut !==
+                "Annulée"
+          ).length,
+
+        terminees:
+          missions.filter(
+            (mission) =>
+              mission.statut ===
+              "Terminée"
+          ).length,
+      };
+    }, [missions]);
+
+  const missionsFiltrees =
+    useMemo(() => {
+      const rechercheNormalisee =
+        normaliserTexte(
+          recherche
+        );
+
+      return missions
+        .filter(
+          (mission) => {
+            if (
+              filtreStatut !==
+                "Tous" &&
+              mission.statut !==
+                filtreStatut
+            ) {
+              return false;
+            }
+
+            if (
+              filtrePriorite !==
+                "Toutes" &&
+              mission.priorite !==
+                filtrePriorite
+            ) {
+              return false;
+            }
+
+            if (
+              filtreType !==
+                "Tous" &&
+              mission.type !==
+                filtreType
+            ) {
+              return false;
+            }
+
+            if (
+              !rechercheNormalisee
+            ) {
+              return true;
+            }
+
+            const logement =
+              logements.find(
+                (item) =>
+                  item.id ===
+                  mission.logementId
+              );
+
+            const voyageur =
+              voyageurs.find(
+                (item) =>
+                  item.id ===
+                  mission.voyageurId
+              );
+
+            const contenu = [
+              mission.titre,
+              mission.description,
+              mission.type,
+              mission.assigneA,
+              mission.date,
+              logement?.nom || "",
+              logement?.ville || "",
+              voyageur?.prenom || "",
+              voyageur?.nom || "",
+            ]
+              .map((valeur) =>
+                normaliserTexte(
+                  String(
+                    valeur || ""
+                  )
+                )
+              )
+              .join(" ");
+
+            return contenu.includes(
+              rechercheNormalisee
+            );
+          }
+        )
+        .sort((a, b) => {
+          const dateA =
+            `${a.date || "9999-12-31"} ${a.heure || "23:59"}`;
+
+          const dateB =
+            `${b.date || "9999-12-31"} ${b.heure || "23:59"}`;
+
+          return dateA.localeCompare(
+            dateB
+          );
+        });
+    }, [
+      missions,
+      logements,
+      voyageurs,
+      recherche,
+      filtreStatut,
+      filtrePriorite,
+      filtreType,
+    ]);
+
+  function nomLogement(
+    id: string
+  ): string {
+    const logement =
+      logements.find(
+        (item) =>
+          item.id === id
+      );
+
+    if (!logement) {
+      return "Aucun logement";
+    }
 
     return logement.ville
       ? `${logement.nom} — ${logement.ville}`
       : logement.nom;
   }
 
-  function nomVoyageur(id: string): string {
-    const voyageur = voyageurs.find((item) => item.id === id);
+  function nomVoyageur(
+    id: string
+  ): string {
+    const voyageur =
+      voyageurs.find(
+        (item) =>
+          item.id === id
+      );
 
-    if (!voyageur) return "Aucun voyageur";
+    if (!voyageur) {
+      return "Aucun voyageur";
+    }
 
     return `${voyageur.prenom} ${voyageur.nom}`.trim();
   }
 
   function ouvrirNouvelleMission() {
-    setMissionEnCours(creerMissionVide());
+    setMissionEnCours(
+      creerMissionVide()
+    );
+
     setErreur("");
-    setFormulaireOuvert(true);
+    setMessage("");
+
+    setFormulaireOuvert(
+      true
+    );
   }
 
-  function ouvrirModification(mission: Mission) {
-    setMissionEnCours({ ...mission });
+  function ouvrirModification(
+    mission: Mission
+  ) {
+    setMissionEnCours({
+      ...mission,
+    });
+
     setErreur("");
-    setFormulaireOuvert(true);
-    window.scrollTo({ top: 0, behavior: "smooth" });
+    setMessage("");
+
+    setFormulaireOuvert(
+      true
+    );
+
+    window.scrollTo({
+      top: 0,
+      behavior: "smooth",
+    });
   }
 
   function fermerFormulaire() {
-    setMissionEnCours(creerMissionVide());
+    setMissionEnCours(
+      creerMissionVide()
+    );
+
     setErreur("");
-    setFormulaireOuvert(false);
+
+    setFormulaireOuvert(
+      false
+    );
   }
 
-  function enregistrerMission() {
-    if (!missionEnCours.titre.trim()) {
-      setErreur("Le titre de la mission est obligatoire.");
-      return;
-    }
-
-    if (!missionEnCours.date) {
-      setErreur("La date de la mission est obligatoire.");
-      return;
-    }
-
-    if (!missionEnCours.heure) {
-      setErreur("L’heure de la mission est obligatoire.");
-      return;
-    }
-
-    const maintenant = new Date().toISOString();
-
-    setMissions((liste) => {
-      const existe = liste.some(
-        (mission) => mission.id === missionEnCours.id
+  function changerLogement(
+    logementId: string
+  ) {
+    const logement =
+      logements.find(
+        (item) =>
+          item.id === logementId
       );
 
-      const missionFinale: Mission = {
-        ...missionEnCours,
-        id: missionEnCours.id || creerIdentifiant(),
-        titre: missionEnCours.titre.trim(),
-        description: missionEnCours.description.trim(),
-        assigneA: missionEnCours.assigneA.trim(),
-        createdAt:
-          existe && missionEnCours.createdAt
-            ? missionEnCours.createdAt
-            : maintenant,
-        updatedAt: maintenant,
+    setMissionEnCours({
+      ...missionEnCours,
+
+      logementId,
+
+      proprietaireId:
+        logement?.proprietaireId ||
+        "",
+    });
+  }
+
+  async function enregistrerMission() {
+    if (
+      sauvegardeEnCours
+    ) {
+      return;
+    }
+
+    setErreur("");
+    setErreurPage("");
+    setMessage("");
+
+    if (
+      !missionEnCours.titre.trim()
+    ) {
+      setErreur(
+        "Le titre de la mission est obligatoire."
+      );
+
+      return;
+    }
+
+    if (
+      !missionEnCours.date
+    ) {
+      setErreur(
+        "La date de la mission est obligatoire."
+      );
+
+      return;
+    }
+
+    if (
+      !missionEnCours.heure
+    ) {
+      setErreur(
+        "L’heure de la mission est obligatoire."
+      );
+
+      return;
+    }
+
+    if (
+      !organizationId
+    ) {
+      setErreur(
+        "L’organisation Cap Serein n’est pas encore chargée."
+      );
+
+      return;
+    }
+
+    setSauvegardeEnCours(
+      true
+    );
+
+    try {
+      const logement =
+        logements.find(
+          (item) =>
+            item.id ===
+            missionEnCours.logementId
+        );
+
+      const dateDebut =
+        `${missionEnCours.date}T${missionEnCours.heure}:00`;
+
+      const payload = {
+        organization_id:
+          organizationId,
+
+        logement_id:
+          missionEnCours.logementId ||
+          null,
+
+        proprietaire_id:
+          logement?.proprietaireId ||
+          null,
+
+        voyageur_id:
+          missionEnCours.voyageurId ||
+          null,
+
+        type_mission:
+          missionEnCours.type,
+
+        titre:
+          missionEnCours.titre.trim(),
+
+        description:
+          missionEnCours.description.trim() ||
+          null,
+
+        observations:
+          missionEnCours.description.trim() ||
+          null,
+
+        date_mission:
+          missionEnCours.date,
+
+        heure_mission:
+          missionEnCours.heure,
+
+        date_debut:
+          dateDebut,
+
+        priorite:
+          missionEnCours.priorite,
+
+        statut:
+          missionEnCours.statut,
+
+        assigne_a:
+          missionEnCours.assigneA.trim() ||
+          null,
       };
 
-      if (existe) {
-        return liste.map((mission) =>
-          mission.id === missionFinale.id
-            ? missionFinale
-            : mission
+      const existe =
+        Boolean(
+          missionEnCours.id
         );
+
+      if (existe) {
+        const {
+          error,
+        } = await supabase
+          .from("missions")
+          .update(payload)
+          .eq(
+            "id",
+            missionEnCours.id
+          )
+          .eq(
+            "organization_id",
+            organizationId
+          );
+
+        if (error) {
+          throw error;
+        }
+      } else {
+        const {
+          error,
+        } = await supabase
+          .from("missions")
+          .insert(payload);
+
+        if (error) {
+          throw error;
+        }
       }
 
-      return [missionFinale, ...liste];
-    });
+      await chargerMissions(
+        organizationId,
+        logements,
+        voyageurs,
+        false
+      );
 
-    fermerFormulaire();
+      fermerFormulaire();
+
+      setMessage(
+        existe
+          ? "La mission a été modifiée et synchronisée."
+          : "La mission a été créée et synchronisée."
+      );
+    } catch (error) {
+      console.error(error);
+
+      setErreur(
+        error instanceof Error
+          ? error.message
+          : "Impossible d’enregistrer la mission."
+      );
+    } finally {
+      setSauvegardeEnCours(
+        false
+      );
+    }
   }
 
-  function supprimerMission(mission: Mission) {
-    const confirmation = window.confirm(
-      `Supprimer définitivement la mission « ${mission.titre} » ?`
+  async function supprimerMission(
+    mission: Mission
+  ) {
+    if (
+      suppressionEnCours
+    ) {
+      return;
+    }
+
+    const confirmation =
+      window.confirm(
+        `Supprimer définitivement la mission « ${mission.titre} » ?`
+      );
+
+    if (!confirmation) {
+      return;
+    }
+
+    if (
+      !organizationId
+    ) {
+      setErreurPage(
+        "L’organisation Cap Serein n’est pas chargée."
+      );
+
+      return;
+    }
+
+    setSuppressionEnCours(
+      mission.id
     );
 
-    if (!confirmation) return;
+    setErreurPage("");
+    setMessage("");
 
-    setMissions((liste) =>
-      liste.filter((item) => item.id !== mission.id)
-    );
+    try {
+      const {
+        error,
+      } = await supabase
+        .from("missions")
+        .delete()
+        .eq(
+          "id",
+          mission.id
+        )
+        .eq(
+          "organization_id",
+          organizationId
+        );
+
+      if (error) {
+        throw error;
+      }
+
+      setMissions(
+        (liste) =>
+          liste.filter(
+            (item) =>
+              item.id !==
+              mission.id
+          )
+      );
+
+      setMessage(
+        "La mission a été supprimée de Supabase."
+      );
+    } catch (error) {
+      console.error(error);
+
+      setErreurPage(
+        error instanceof Error
+          ? error.message
+          : "Impossible de supprimer la mission."
+      );
+    } finally {
+      setSuppressionEnCours(
+        ""
+      );
+    }
   }
 
-  function changerStatut(
+  async function changerStatut(
     id: string,
     statut: StatutMission
   ) {
-    const maintenant = new Date().toISOString();
+    if (
+      !organizationId ||
+      statutEnCours
+    ) {
+      return;
+    }
 
-    setMissions((liste) =>
-      liste.map((mission) =>
-        mission.id === id
-          ? {
-              ...mission,
-              statut,
-              updatedAt: maintenant,
-            }
-          : mission
-      )
+    setStatutEnCours(
+      id
     );
+
+    setErreurPage("");
+    setMessage("");
+
+    try {
+      const {
+        error,
+      } = await supabase
+        .from("missions")
+        .update({
+          statut,
+        })
+        .eq(
+          "id",
+          id
+        )
+        .eq(
+          "organization_id",
+          organizationId
+        );
+
+      if (error) {
+        throw error;
+      }
+
+      setMissions(
+        (liste) =>
+          liste.map(
+            (mission) =>
+              mission.id === id
+                ? {
+                    ...mission,
+                    statut,
+                    updatedAt:
+                      new Date().toISOString(),
+                  }
+                : mission
+          )
+      );
+    } catch (error) {
+      console.error(error);
+
+      setErreurPage(
+        error instanceof Error
+          ? error.message
+          : "Impossible de modifier le statut."
+      );
+    } finally {
+      setStatutEnCours(
+        ""
+      );
+    }
   }
 
   function reinitialiserFiltres() {
@@ -366,7 +1710,9 @@ export default function MissionsPage() {
         action={
           <button
             type="button"
-            onClick={ouvrirNouvelleMission}
+            onClick={
+              ouvrirNouvelleMission
+            }
             className="rounded-2xl bg-blue-600 px-5 py-3 text-sm font-bold text-white shadow-sm transition hover:bg-blue-700 hover:shadow-md"
           >
             + Nouvelle mission
@@ -374,34 +1720,60 @@ export default function MissionsPage() {
         }
       />
 
+      <div className="rounded-2xl border border-emerald-200 bg-emerald-50 px-5 py-4 text-sm font-bold text-emerald-800">
+        ☁️ Les missions sont maintenant synchronisées avec Supabase.
+      </div>
+
+      {message && (
+        <div className="rounded-2xl border border-blue-200 bg-blue-50 px-5 py-4 text-sm font-bold text-blue-800">
+          {message}
+        </div>
+      )}
+
+      {erreurPage && (
+        <div className="rounded-2xl border border-red-200 bg-red-50 px-5 py-4 text-sm font-bold text-red-700">
+          {erreurPage}
+        </div>
+      )}
+
       <div className="grid gap-6 md:grid-cols-2 xl:grid-cols-5">
         <CarteStatistique
           titre="Total"
-          valeur={statistiques.total}
+          valeur={
+            statistiques.total
+          }
           couleur="blue"
         />
 
         <CarteStatistique
           titre="À faire"
-          valeur={statistiques.aFaire}
+          valeur={
+            statistiques.aFaire
+          }
           couleur="orange"
         />
 
         <CarteStatistique
           titre="En cours"
-          valeur={statistiques.enCours}
+          valeur={
+            statistiques.enCours
+          }
           couleur="blue"
         />
 
         <CarteStatistique
           titre="Urgentes"
-          valeur={statistiques.urgentes}
+          valeur={
+            statistiques.urgentes
+          }
           couleur="red"
         />
 
         <CarteStatistique
           titre="Terminées"
-          valeur={statistiques.terminees}
+          valeur={
+            statistiques.terminees
+          }
           couleur="green"
         />
       </div>
@@ -424,7 +1796,9 @@ export default function MissionsPage() {
           <div className="grid gap-5 md:grid-cols-2">
             <Champ
               label="Titre de la mission"
-              value={missionEnCours.titre}
+              value={
+                missionEnCours.titre
+              }
               onChange={(valeur) =>
                 setMissionEnCours({
                   ...missionEnCours,
@@ -439,20 +1813,30 @@ export default function MissionsPage() {
               </span>
 
               <select
-                value={missionEnCours.type}
+                value={
+                  missionEnCours.type
+                }
                 onChange={(event) =>
                   setMissionEnCours({
                     ...missionEnCours,
-                    type: event.target.value as TypeMission,
+
+                    type:
+                      event.target
+                        .value as TypeMission,
                   })
                 }
                 className="w-full rounded-2xl border border-slate-300 bg-white px-5 py-3 text-slate-900 outline-none focus:border-blue-600 focus:ring-4 focus:ring-blue-100"
               >
-                {typesMission.map((type) => (
-                  <option key={type} value={type}>
-                    {type}
-                  </option>
-                ))}
+                {typesMission.map(
+                  (type) => (
+                    <option
+                      key={type}
+                      value={type}
+                    >
+                      {type}
+                    </option>
+                  )
+                )}
               </select>
             </label>
 
@@ -462,25 +1846,38 @@ export default function MissionsPage() {
               </span>
 
               <select
-                value={missionEnCours.logementId}
+                value={
+                  missionEnCours.logementId
+                }
                 onChange={(event) =>
-                  setMissionEnCours({
-                    ...missionEnCours,
-                    logementId: event.target.value,
-                  })
+                  changerLogement(
+                    event.target.value
+                  )
                 }
                 className="w-full rounded-2xl border border-slate-300 bg-white px-5 py-3 text-slate-900 outline-none focus:border-blue-600 focus:ring-4 focus:ring-blue-100"
               >
-                <option value="">Aucun logement</option>
+                <option value="">
+                  Aucun logement
+                </option>
 
-                {logements.map((logement) => (
-                  <option key={logement.id} value={logement.id}>
-                    {logement.nom}
-                    {logement.ville
-                      ? ` — ${logement.ville}`
-                      : ""}
-                  </option>
-                ))}
+                {logements.map(
+                  (logement) => (
+                    <option
+                      key={
+                        logement.id
+                      }
+                      value={
+                        logement.id
+                      }
+                    >
+                      {logement.nom}
+
+                      {logement.ville
+                        ? ` — ${logement.ville}`
+                        : ""}
+                    </option>
+                  )
+                )}
               </select>
             </label>
 
@@ -490,29 +1887,47 @@ export default function MissionsPage() {
               </span>
 
               <select
-                value={missionEnCours.voyageurId}
+                value={
+                  missionEnCours.voyageurId
+                }
                 onChange={(event) =>
                   setMissionEnCours({
                     ...missionEnCours,
-                    voyageurId: event.target.value,
+
+                    voyageurId:
+                      event.target.value,
                   })
                 }
                 className="w-full rounded-2xl border border-slate-300 bg-white px-5 py-3 text-slate-900 outline-none focus:border-blue-600 focus:ring-4 focus:ring-blue-100"
               >
-                <option value="">Aucun voyageur</option>
+                <option value="">
+                  Aucun voyageur
+                </option>
 
-                {voyageurs.map((voyageur) => (
-                  <option key={voyageur.id} value={voyageur.id}>
-                    {voyageur.prenom} {voyageur.nom}
-                  </option>
-                ))}
+                {voyageurs.map(
+                  (voyageur) => (
+                    <option
+                      key={
+                        voyageur.id
+                      }
+                      value={
+                        voyageur.id
+                      }
+                    >
+                      {voyageur.prenom}{" "}
+                      {voyageur.nom}
+                    </option>
+                  )
+                )}
               </select>
             </label>
 
             <Champ
               label="Date"
               type="date"
-              value={missionEnCours.date}
+              value={
+                missionEnCours.date
+              }
               onChange={(valeur) =>
                 setMissionEnCours({
                   ...missionEnCours,
@@ -524,7 +1939,9 @@ export default function MissionsPage() {
             <Champ
               label="Heure"
               type="time"
-              value={missionEnCours.heure}
+              value={
+                missionEnCours.heure
+              }
               onChange={(valeur) =>
                 setMissionEnCours({
                   ...missionEnCours,
@@ -539,21 +1956,34 @@ export default function MissionsPage() {
               </span>
 
               <select
-                value={missionEnCours.priorite}
+                value={
+                  missionEnCours.priorite
+                }
                 onChange={(event) =>
                   setMissionEnCours({
                     ...missionEnCours,
+
                     priorite:
-                      event.target.value as PrioriteMission,
+                      event.target
+                        .value as PrioriteMission,
                   })
                 }
                 className="w-full rounded-2xl border border-slate-300 bg-white px-5 py-3 text-slate-900 outline-none focus:border-blue-600 focus:ring-4 focus:ring-blue-100"
               >
-                {prioritesMission.map((priorite) => (
-                  <option key={priorite} value={priorite}>
-                    {priorite}
-                  </option>
-                ))}
+                {prioritesMission.map(
+                  (priorite) => (
+                    <option
+                      key={
+                        priorite
+                      }
+                      value={
+                        priorite
+                      }
+                    >
+                      {priorite}
+                    </option>
+                  )
+                )}
               </select>
             </label>
 
@@ -563,31 +1993,47 @@ export default function MissionsPage() {
               </span>
 
               <select
-                value={missionEnCours.statut}
+                value={
+                  missionEnCours.statut
+                }
                 onChange={(event) =>
                   setMissionEnCours({
                     ...missionEnCours,
+
                     statut:
-                      event.target.value as StatutMission,
+                      event.target
+                        .value as StatutMission,
                   })
                 }
                 className="w-full rounded-2xl border border-slate-300 bg-white px-5 py-3 text-slate-900 outline-none focus:border-blue-600 focus:ring-4 focus:ring-blue-100"
               >
-                {statutsMission.map((statut) => (
-                  <option key={statut} value={statut}>
-                    {statut}
-                  </option>
-                ))}
+                {statutsMission.map(
+                  (statut) => (
+                    <option
+                      key={
+                        statut
+                      }
+                      value={
+                        statut
+                      }
+                    >
+                      {statut}
+                    </option>
+                  )
+                )}
               </select>
             </label>
 
             <Champ
               label="Assignée à"
-              value={missionEnCours.assigneA}
+              value={
+                missionEnCours.assigneA
+              }
               onChange={(valeur) =>
                 setMissionEnCours({
                   ...missionEnCours,
-                  assigneA: valeur,
+                  assigneA:
+                    valeur,
                 })
               }
             />
@@ -599,11 +2045,15 @@ export default function MissionsPage() {
             </span>
 
             <textarea
-              value={missionEnCours.description}
+              value={
+                missionEnCours.description
+              }
               onChange={(event) =>
                 setMissionEnCours({
                   ...missionEnCours,
-                  description: event.target.value,
+
+                  description:
+                    event.target.value,
                 })
               }
               rows={5}
@@ -615,16 +2065,30 @@ export default function MissionsPage() {
           <div className="mt-6 flex flex-wrap gap-3">
             <button
               type="button"
-              onClick={enregistrerMission}
-              className="rounded-2xl bg-blue-600 px-6 py-3 font-bold text-white transition hover:bg-blue-700"
+              onClick={
+                enregistrerMission
+              }
+              disabled={
+                sauvegardeEnCours
+              }
+              className="rounded-2xl bg-blue-600 px-6 py-3 font-bold text-white transition hover:bg-blue-700 disabled:cursor-not-allowed disabled:opacity-50"
             >
-              Enregistrer
+              {sauvegardeEnCours
+                ? "Enregistrement..."
+                : missionEnCours.id
+                  ? "Enregistrer les modifications"
+                  : "Enregistrer"}
             </button>
 
             <button
               type="button"
-              onClick={fermerFormulaire}
-              className="rounded-2xl border border-slate-300 bg-white px-6 py-3 font-bold text-slate-700 transition hover:bg-slate-50"
+              onClick={
+                fermerFormulaire
+              }
+              disabled={
+                sauvegardeEnCours
+              }
+              className="rounded-2xl border border-slate-300 bg-white px-6 py-3 font-bold text-slate-700 transition hover:bg-slate-50 disabled:opacity-50"
             >
               Annuler
             </button>
@@ -644,9 +2108,13 @@ export default function MissionsPage() {
 
             <input
               type="search"
-              value={recherche}
+              value={
+                recherche
+              }
               onChange={(event) =>
-                setRecherche(event.target.value)
+                setRecherche(
+                  event.target.value
+                )
               }
               placeholder="Titre, logement, voyageur, intervenant..."
               className="min-h-12 w-full rounded-2xl border border-slate-300 bg-white px-5 py-3 text-slate-900 outline-none placeholder:text-slate-400 focus:border-blue-600 focus:ring-4 focus:ring-blue-100"
@@ -655,9 +2123,13 @@ export default function MissionsPage() {
 
           <SelectFiltre
             label="Statut"
-            value={filtreStatut}
+            value={
+              filtreStatut
+            }
             onChange={(valeur) =>
-              setFiltreStatut(valeur as FiltreStatut)
+              setFiltreStatut(
+                valeur as FiltreStatut
+              )
             }
             options={[
               "Tous",
@@ -667,9 +2139,13 @@ export default function MissionsPage() {
 
           <SelectFiltre
             label="Priorité"
-            value={filtrePriorite}
+            value={
+              filtrePriorite
+            }
             onChange={(valeur) =>
-              setFiltrePriorite(valeur as FiltrePriorite)
+              setFiltrePriorite(
+                valeur as FiltrePriorite
+              )
             }
             options={[
               "Toutes",
@@ -679,9 +2155,13 @@ export default function MissionsPage() {
 
           <SelectFiltre
             label="Type"
-            value={filtreType}
+            value={
+              filtreType
+            }
             onChange={(valeur) =>
-              setFiltreType(valeur as FiltreType)
+              setFiltreType(
+                valeur as FiltreType
+              )
             }
             options={[
               "Tous",
@@ -692,8 +2172,12 @@ export default function MissionsPage() {
           <div className="flex items-end">
             <button
               type="button"
-              onClick={reinitialiserFiltres}
-              disabled={!filtresActifs}
+              onClick={
+                reinitialiserFiltres
+              }
+              disabled={
+                !filtresActifs
+              }
               className="min-h-12 w-full rounded-2xl border border-slate-300 bg-white px-5 py-3 text-sm font-bold text-slate-700 transition hover:bg-slate-50 disabled:cursor-not-allowed disabled:opacity-40"
             >
               Réinitialiser
@@ -711,30 +2195,57 @@ export default function MissionsPage() {
             <div className="mx-auto h-10 w-10 animate-spin rounded-full border-4 border-slate-200 border-t-blue-600" />
 
             <p className="mt-4 text-sm font-bold text-slate-500">
-              Chargement des missions...
+              Chargement des missions depuis Supabase...
             </p>
           </div>
-        ) : missionsFiltrees.length > 0 ? (
+        ) : missionsFiltrees.length >
+          0 ? (
           <div className="space-y-5">
-            {missionsFiltrees.map((mission) => (
-              <CarteMission
-                key={mission.id}
-                mission={mission}
-                logement={nomLogement(mission.logementId)}
-                voyageur={nomVoyageur(mission.voyageurId)}
-                onModifier={() =>
-                  ouvrirModification(mission)
-                }
-                onSupprimer={() =>
-                  supprimerMission(mission)
-                }
-                onChangerStatut={(statut) =>
-                  changerStatut(mission.id, statut)
-                }
-              />
-            ))}
+            {missionsFiltrees.map(
+              (mission) => (
+                <CarteMission
+                  key={
+                    mission.id
+                  }
+                  mission={
+                    mission
+                  }
+                  logement={nomLogement(
+                    mission.logementId
+                  )}
+                  voyageur={nomVoyageur(
+                    mission.voyageurId
+                  )}
+                  actionsDesactivees={
+                    suppressionEnCours ===
+                      mission.id ||
+                    statutEnCours ===
+                      mission.id
+                  }
+                  onModifier={() =>
+                    ouvrirModification(
+                      mission
+                    )
+                  }
+                  onSupprimer={() =>
+                    supprimerMission(
+                      mission
+                    )
+                  }
+                  onChangerStatut={(
+                    statut
+                  ) => {
+                    void changerStatut(
+                      mission.id,
+                      statut
+                    );
+                  }}
+                />
+              )
+            )}
           </div>
-        ) : missions.length === 0 ? (
+        ) : missions.length ===
+          0 ? (
           <EtatVide
             icone="📋"
             titre="Aucune mission enregistrée"
@@ -742,7 +2253,9 @@ export default function MissionsPage() {
             action={
               <button
                 type="button"
-                onClick={ouvrirNouvelleMission}
+                onClick={
+                  ouvrirNouvelleMission
+                }
                 className="mt-6 rounded-2xl bg-blue-600 px-5 py-3 font-bold text-white hover:bg-blue-700"
               >
                 + Créer une mission
@@ -757,7 +2270,9 @@ export default function MissionsPage() {
             action={
               <button
                 type="button"
-                onClick={reinitialiserFiltres}
+                onClick={
+                  reinitialiserFiltres
+                }
                 className="mt-6 rounded-2xl border border-slate-300 bg-white px-5 py-3 font-bold text-slate-700 hover:bg-slate-50"
               >
                 Effacer les filtres
@@ -774,6 +2289,7 @@ function CarteMission({
   mission,
   logement,
   voyageur,
+  actionsDesactivees,
   onModifier,
   onSupprimer,
   onChangerStatut,
@@ -781,9 +2297,15 @@ function CarteMission({
   mission: Mission;
   logement: string;
   voyageur: string;
+
+  actionsDesactivees: boolean;
+
   onModifier: () => void;
   onSupprimer: () => void;
-  onChangerStatut: (statut: StatutMission) => void;
+
+  onChangerStatut: (
+    statut: StatutMission
+  ) => void;
 }) {
   const prioriteClasses: Record<
     PrioriteMission,
@@ -791,21 +2313,30 @@ function CarteMission({
   > = {
     Basse:
       "border-slate-200 bg-slate-100 text-slate-700",
+
     Normale:
       "border-blue-200 bg-blue-50 text-blue-700",
+
     Haute:
       "border-orange-200 bg-orange-50 text-orange-700",
+
     Urgente:
       "border-red-200 bg-red-50 text-red-700",
   };
 
-  const statutClasses: Record<StatutMission, string> = {
+  const statutClasses: Record<
+    StatutMission,
+    string
+  > = {
     "À faire":
       "bg-orange-100 text-orange-700",
+
     "En cours":
       "bg-blue-100 text-blue-700",
+
     Terminée:
       "bg-emerald-100 text-emerald-700",
+
     Annulée:
       "bg-slate-200 text-slate-600",
   };
@@ -840,7 +2371,8 @@ function CarteMission({
             <Info
               label="Date"
               value={`${mission.date} à ${
-                mission.heure || "--:--"
+                mission.heure ||
+                "--:--"
               }`}
             />
 
@@ -857,14 +2389,17 @@ function CarteMission({
             <Info
               label="Assignée à"
               value={
-                mission.assigneA || "Non renseigné"
+                mission.assigneA ||
+                "Non renseigné"
               }
             />
           </div>
 
           {mission.description && (
             <p className="mt-5 whitespace-pre-wrap rounded-2xl bg-slate-50 p-4 text-sm leading-6 text-slate-600">
-              {mission.description}
+              {
+                mission.description
+              }
             </p>
           )}
         </div>
@@ -872,40 +2407,71 @@ function CarteMission({
         <div className="flex flex-wrap gap-2 xl:max-w-xs xl:justify-end">
           <button
             type="button"
-            onClick={() => onChangerStatut("À faire")}
-            className="rounded-xl border border-slate-300 bg-white px-3 py-2 text-sm font-bold text-slate-700 hover:bg-slate-50"
+            disabled={
+              actionsDesactivees
+            }
+            onClick={() =>
+              onChangerStatut(
+                "À faire"
+              )
+            }
+            className="rounded-xl border border-slate-300 bg-white px-3 py-2 text-sm font-bold text-slate-700 hover:bg-slate-50 disabled:opacity-40"
           >
             À faire
           </button>
 
           <button
             type="button"
-            onClick={() => onChangerStatut("En cours")}
-            className="rounded-xl border border-blue-200 bg-blue-50 px-3 py-2 text-sm font-bold text-blue-700 hover:bg-blue-100"
+            disabled={
+              actionsDesactivees
+            }
+            onClick={() =>
+              onChangerStatut(
+                "En cours"
+              )
+            }
+            className="rounded-xl border border-blue-200 bg-blue-50 px-3 py-2 text-sm font-bold text-blue-700 hover:bg-blue-100 disabled:opacity-40"
           >
             En cours
           </button>
 
           <button
             type="button"
-            onClick={() => onChangerStatut("Terminée")}
-            className="rounded-xl border border-emerald-200 bg-emerald-50 px-3 py-2 text-sm font-bold text-emerald-700 hover:bg-emerald-100"
+            disabled={
+              actionsDesactivees
+            }
+            onClick={() =>
+              onChangerStatut(
+                "Terminée"
+              )
+            }
+            className="rounded-xl border border-emerald-200 bg-emerald-50 px-3 py-2 text-sm font-bold text-emerald-700 hover:bg-emerald-100 disabled:opacity-40"
           >
             Terminée
           </button>
 
           <button
             type="button"
-            onClick={onModifier}
-            className="rounded-xl bg-slate-900 px-3 py-2 text-sm font-bold text-white hover:bg-slate-800"
+            disabled={
+              actionsDesactivees
+            }
+            onClick={
+              onModifier
+            }
+            className="rounded-xl bg-slate-900 px-3 py-2 text-sm font-bold text-white hover:bg-slate-800 disabled:opacity-40"
           >
             Modifier
           </button>
 
           <button
             type="button"
-            onClick={onSupprimer}
-            className="rounded-xl border border-red-200 bg-red-50 px-3 py-2 text-sm font-bold text-red-700 hover:bg-red-100"
+            disabled={
+              actionsDesactivees
+            }
+            onClick={
+              onSupprimer
+            }
+            className="rounded-xl border border-red-200 bg-red-50 px-3 py-2 text-sm font-bold text-red-700 hover:bg-red-100 disabled:opacity-40"
           >
             Supprimer
           </button>
@@ -922,15 +2488,24 @@ function CarteStatistique({
 }: {
   titre: string;
   valeur: number;
-  couleur: "blue" | "green" | "orange" | "red";
+  couleur:
+    | "blue"
+    | "green"
+    | "orange"
+    | "red";
 }) {
   const couleurs = {
-    blue: "border-blue-200 bg-blue-50 text-blue-700",
+    blue:
+      "border-blue-200 bg-blue-50 text-blue-700",
+
     green:
       "border-emerald-200 bg-emerald-50 text-emerald-700",
+
     orange:
       "border-orange-200 bg-orange-50 text-orange-700",
-    red: "border-red-200 bg-red-50 text-red-700",
+
+    red:
+      "border-red-200 bg-red-50 text-red-700",
   };
 
   return (
@@ -956,7 +2531,11 @@ function Champ({
 }: {
   label: string;
   value: string;
-  onChange: (value: string) => void;
+
+  onChange: (
+    value: string
+  ) => void;
+
   type?: string;
 }) {
   return (
@@ -969,7 +2548,9 @@ function Champ({
         type={type}
         value={value}
         onChange={(event) =>
-          onChange(event.target.value)
+          onChange(
+            event.target.value
+          )
         }
         className="w-full rounded-2xl border border-slate-300 bg-white px-5 py-3 text-slate-900 outline-none placeholder:text-slate-400 focus:border-blue-600 focus:ring-4 focus:ring-blue-100"
       />
@@ -985,7 +2566,11 @@ function SelectFiltre({
 }: {
   label: string;
   value: string;
-  onChange: (value: string) => void;
+
+  onChange: (
+    value: string
+  ) => void;
+
   options: string[];
 }) {
   return (
@@ -997,15 +2582,26 @@ function SelectFiltre({
       <select
         value={value}
         onChange={(event) =>
-          onChange(event.target.value)
+          onChange(
+            event.target.value
+          )
         }
         className="min-h-12 w-full rounded-2xl border border-slate-300 bg-white px-4 py-3 text-slate-900 outline-none focus:border-blue-600 focus:ring-4 focus:ring-blue-100"
       >
-        {options.map((option) => (
-          <option key={option} value={option}>
-            {option}
-          </option>
-        ))}
+        {options.map(
+          (option) => (
+            <option
+              key={
+                option
+              }
+              value={
+                option
+              }
+            >
+              {option}
+            </option>
+          )
+        )}
       </select>
     </label>
   );
@@ -1041,7 +2637,9 @@ function EtatVide({
 }) {
   return (
     <div className="rounded-3xl border border-dashed border-slate-300 bg-slate-50 px-6 py-16 text-center">
-      <div className="text-5xl">{icone}</div>
+      <div className="text-5xl">
+        {icone}
+      </div>
 
       <h3 className="mt-5 text-xl font-black text-slate-900">
         {titre}
