@@ -1,5 +1,5 @@
 export type TypeDocument = "Devis" | "Facture" | "Acompte" | "Avoir";
-export type StatutFacture = "Brouillon" | "Envoyée" | "Payée" | "En retard" | "Annulée";
+export type StatutFacture = "Brouillon" | "Envoyée" | "Payée" | "Partiellement payée" | "En retard" | "Annulée";
 
 export interface LigneFacture {
   id: string;

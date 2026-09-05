@@ -8,10 +8,6 @@ import {
 
 import PageHeader from "@/components/ui/PageHeader";
 import Section from "@/components/ui/Section";
-import {
-  enregistrer,
-  lire,
-} from "@/lib/database";
 import { supabase } from "@/lib/supabase";
 
 type StatutProprietaire =
@@ -66,47 +62,7 @@ function normaliserStatut(
   return "Actif";
 }
 
-function normaliserProprietaireLocal(
-  proprietaire: Partial<Proprietaire>
-): Proprietaire {
-  return {
-    id: String(
-      proprietaire.id || ""
-    ),
 
-    nom: String(
-      proprietaire.nom || ""
-    ),
-
-    telephone: String(
-      proprietaire.telephone || ""
-    ),
-
-    email: String(
-      proprietaire.email || ""
-    ),
-
-    ville: String(
-      proprietaire.ville || ""
-    ),
-
-    statut: normaliserStatut(
-      proprietaire.statut
-    ),
-
-    notes: String(
-      proprietaire.notes || ""
-    ),
-  };
-}
-
-function estUuid(
-  valeur: string
-): boolean {
-  return /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(
-    valeur
-  );
-}
 
 function normaliserTexte(
   valeur: string
@@ -282,27 +238,6 @@ export default function ProprietairesPage() {
     };
   }, []);
 
-  /*
-   * Supabase est désormais la source principale.
-   *
-   * Cette copie locale est conservée temporairement
-   * pour les autres modules qui utilisent encore
-   * le stockage navigateur.
-   */
-  useEffect(() => {
-    if (!donneesChargees) {
-      return;
-    }
-
-    enregistrer(
-      "proprietaires",
-      proprietaires
-    );
-  }, [
-    proprietaires,
-    donneesChargees,
-  ]);
-
   async function chargerProprietaires(
     orgId: string,
     autoriserMigration: boolean
@@ -339,41 +274,6 @@ export default function ProprietairesPage() {
     const lignes =
       (data ||
         []) as ProprietaireSupabase[];
-
-    if (
-      autoriserMigration &&
-      lignes.length === 0
-    ) {
-      const proprietairesLocaux =
-        lire<
-          Partial<Proprietaire>
-        >("proprietaires")
-          .map(
-            normaliserProprietaireLocal
-          )
-          .filter(
-            (item) =>
-              item.nom.trim() !==
-              ""
-          );
-
-      if (
-        proprietairesLocaux.length >
-        0
-      ) {
-        await importerProprietairesLocaux(
-          orgId,
-          proprietairesLocaux
-        );
-
-        await chargerProprietaires(
-          orgId,
-          false
-        );
-
-        return true;
-      }
-    }
 
     const proprietairesConvertis =
       lignes.map(
@@ -415,72 +315,6 @@ export default function ProprietairesPage() {
     );
 
     return false;
-  }
-
-  async function importerProprietairesLocaux(
-    orgId: string,
-    proprietairesLocaux: Proprietaire[]
-  ) {
-    for (
-      const item of proprietairesLocaux
-    ) {
-      const payload: Record<
-        string,
-        unknown
-      > = {
-        organization_id:
-          orgId,
-
-        nom:
-          item.nom.trim(),
-
-        telephone:
-          item.telephone.trim() ||
-          null,
-
-        email:
-          item.email.trim() ||
-          null,
-
-        ville:
-          item.ville.trim() ||
-          null,
-
-        statut:
-          item.statut,
-
-        actif:
-          item.statut !==
-          "Inactif",
-
-        observations:
-          item.notes.trim() ||
-          null,
-      };
-
-      /*
-       * On garde l'ancien UUID lorsque possible,
-       * afin de conserver les relations locales
-       * pendant la phase de migration.
-       */
-      if (
-        item.id &&
-        estUuid(item.id)
-      ) {
-        payload.id =
-          item.id;
-      }
-
-      const {
-        error,
-      } = await supabase
-        .from("proprietaires")
-        .insert(payload);
-
-      if (error) {
-        throw error;
-      }
-    }
   }
 
   const resultats =

@@ -4,7 +4,6 @@ import { useEffect, useMemo, useState } from "react";
 
 import PageHeader from "@/components/ui/PageHeader";
 import Section from "@/components/ui/Section";
-import { enregistrer, lire } from "@/lib/database";
 import { supabase } from "@/lib/supabase";
 
 type TypeLogement =
@@ -159,91 +158,7 @@ function normaliserTypeLogement(
   return "";
 }
 
-function estUuid(
-  valeur: string
-): boolean {
-  return /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(
-    valeur
-  );
-}
 
-function normaliserLogementLocal(
-  logement: Partial<Logement>
-): Logement {
-  return {
-    ...creerLogementVide(),
-    ...logement,
-
-    id: String(logement.id || ""),
-
-    proprietaireId:
-      logement.proprietaireId || null,
-
-    nom: String(logement.nom || ""),
-
-    typeLogement: normaliserTypeLogement(
-      logement.typeLogement
-    ),
-
-    superficie: Math.max(
-      0,
-      Number(logement.superficie || 0)
-    ),
-
-    nombreChambres: Math.max(
-      0,
-      Math.round(
-        Number(
-          logement.nombreChambres || 0
-        )
-      )
-    ),
-
-    adresse: String(
-      logement.adresse || ""
-    ),
-
-    ville: String(
-      logement.ville || ""
-    ),
-
-    codePostal: String(
-      logement.codePostal || ""
-    ),
-
-    proprietaire: String(
-      logement.proprietaire || ""
-    ),
-
-    telephone: String(
-      logement.telephone || ""
-    ),
-
-    email: String(
-      logement.email || ""
-    ),
-
-    wifi: String(
-      logement.wifi || ""
-    ),
-
-    motDePasseWifi: String(
-      logement.motDePasseWifi || ""
-    ),
-
-    boiteCles: String(
-      logement.boiteCles || ""
-    ),
-
-    codeBoiteCles: String(
-      logement.codeBoiteCles || ""
-    ),
-
-    observations: String(
-      logement.observations || ""
-    ),
-  };
-}
 
 export default function LogementsPage() {
   const [organizationId, setOrganizationId] =
@@ -380,31 +295,6 @@ export default function LogementsPage() {
     };
   }, []);
 
-  /*
-   * Transition :
-   * Supabase est désormais la source principale.
-   *
-   * On garde seulement une copie locale des logements
-   * pour les anciens modules qui utilisent encore
-   * localStorage.
-   *
-   * Cette copie disparaîtra lorsque tous les modules
-   * auront été migrés.
-   */
-  useEffect(() => {
-    if (!donneesChargees) {
-      return;
-    }
-
-    enregistrer(
-      "logements",
-      logements
-    );
-  }, [
-    logements,
-    donneesChargees,
-  ]);
-
   useEffect(() => {
     function verifierOuvertureDepuisAdresse() {
       if (
@@ -471,44 +361,6 @@ export default function LogementsPage() {
 
     const lignes =
       (data || []) as LogementSupabase[];
-
-    /*
-     * Première ouverture après migration :
-     * si Supabase est vide, on récupère les anciens
-     * logements présents dans le navigateur.
-     */
-    if (
-      autoriserMigration &&
-      lignes.length === 0
-    ) {
-      const logementsLocaux =
-        lire<Partial<Logement>>(
-          "logements"
-        )
-          .map(
-            normaliserLogementLocal
-          )
-          .filter(
-            (logement) =>
-              logement.nom.trim() !== ""
-          );
-
-      if (
-        logementsLocaux.length > 0
-      ) {
-        await importerLogementsLocaux(
-          orgId,
-          logementsLocaux
-        );
-
-        await chargerLogements(
-          orgId,
-          false
-        );
-
-        return true;
-      }
-    }
 
     const idsProprietaires = [
       ...new Set(
@@ -685,103 +537,6 @@ export default function LogementsPage() {
     );
 
     return false;
-  }
-
-  async function importerLogementsLocaux(
-    orgId: string,
-    logementsLocaux: Logement[]
-  ) {
-    for (
-      const logement of logementsLocaux
-    ) {
-      const proprietaireId =
-        await obtenirOuCreerProprietaire(
-          orgId,
-          logement,
-          null
-        );
-
-      const payload: Record<
-        string,
-        unknown
-      > = {
-        organization_id: orgId,
-
-        proprietaire_id:
-          proprietaireId,
-
-        nom:
-          logement.nom.trim() ||
-          "Logement",
-
-        type_logement:
-          logement.typeLogement ||
-          null,
-
-        superficie_m2:
-          logement.superficie > 0
-            ? logement.superficie
-            : null,
-
-        nombre_chambres:
-          logement.nombreChambres,
-
-        adresse:
-          logement.adresse.trim() ||
-          "Adresse à compléter",
-
-        ville:
-          logement.ville.trim() ||
-          null,
-
-        code_postal:
-          logement.codePostal.trim() ||
-          null,
-
-        wifi_ssid:
-          logement.wifi.trim() ||
-          null,
-
-        wifi_mot_de_passe:
-          logement.motDePasseWifi.trim() ||
-          null,
-
-        boite_cles:
-          logement.boiteCles.trim() ||
-          null,
-
-        code_boite_cles:
-          logement.codeBoiteCles.trim() ||
-          null,
-
-        observations:
-          logement.observations.trim() ||
-          null,
-      };
-
-      /*
-       * On conserve l'ancien UUID lorsque c'est
-       * possible pour limiter les problèmes avec
-       * les autres modules encore locaux.
-       */
-      if (
-        logement.id &&
-        estUuid(logement.id)
-      ) {
-        payload.id =
-          logement.id;
-      }
-
-      const {
-        error,
-      } = await supabase
-        .from("logements")
-        .insert(payload);
-
-      if (error) {
-        throw error;
-      }
-    }
   }
 
   async function obtenirOuCreerProprietaire(

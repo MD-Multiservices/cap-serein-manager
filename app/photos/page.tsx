@@ -6,7 +6,7 @@ import type { ChangeEvent, ReactNode } from "react";
 
 import PageHeader from "@/components/ui/PageHeader";
 import Section from "@/components/ui/Section";
-import { lire } from "@/lib/database";
+import { useRemoteCollection } from "@/lib/useRemoteCollection";
 
 type CategoriePhoto =
   | "Arrivée"
@@ -55,7 +55,6 @@ type Logement = {
 
 type FiltreCategorie = "Toutes" | CategoriePhoto;
 
-const CLE_STOCKAGE = "cap-serein-photos";
 
 const categoriesPhoto: CategoriePhoto[] = [
   "Arrivée",
@@ -144,57 +143,8 @@ function normaliserCategorie(
   return "Autre";
 }
 
-function normaliserPhoto(item: AnciennePhoto): Photo {
-  const maintenant = new Date().toISOString();
 
-  return {
-    id: item.id || creerIdentifiant("photo"),
-    logementId:
-      item.logementId || item.logement || "",
-    categorie: normaliserCategorie(
-      item.categorie || item.type
-    ),
-    date: item.date || dateLocaleISO(),
-    titre: item.titre || "",
-    description:
-      item.description ||
-      item.commentaire ||
-      item.observations ||
-      "",
-    image:
-      item.image ||
-      item.dataUrl ||
-      item.url ||
-      item.src ||
-      "",
-    nomFichier: item.nomFichier || "photo.jpg",
-    createdAt: item.createdAt || maintenant,
-    updatedAt: item.updatedAt || maintenant,
-  };
-}
 
-function lirePhotos(): Photo[] {
-  if (typeof window === "undefined") return [];
-
-  try {
-    const contenu =
-      window.localStorage.getItem(CLE_STOCKAGE);
-
-    if (!contenu) return [];
-
-    const donnees = JSON.parse(contenu);
-
-    if (!Array.isArray(donnees)) return [];
-
-    return donnees
-      .map((item) =>
-        normaliserPhoto(item as AnciennePhoto)
-      )
-      .filter((photo) => Boolean(photo.image));
-  } catch {
-    return [];
-  }
-}
 
 function compresserImage(file: File): Promise<string> {
   return new Promise((resolve, reject) => {
@@ -280,10 +230,9 @@ function dateIlYASeptJours(): number {
 }
 
 export default function PhotosPage() {
-  const [photos, setPhotos] = useState<Photo[]>([]);
-  const [logements, setLogements] = useState<
-    Logement[]
-  >([]);
+  const remote = useRemoteCollection<Photo>("photos");
+  const photos = remote.items;
+  const logements = (remote.references.logements || []) as unknown as Logement[];
 
   const [photosEnAttente, setPhotosEnAttente] =
     useState<PhotoEnAttente[]>([]);
@@ -305,11 +254,10 @@ export default function PhotosPage() {
   const [traitementEnCours, setTraitementEnCours] =
     useState(false);
 
-  const [donneesChargees, setDonneesChargees] =
-    useState(false);
+  const donneesChargees = !remote.loading;
 
   const [erreur, setErreur] = useState("");
-  const [erreurStockage, setErreurStockage] =
+  const [erreurStockage] =
     useState("");
 
   const [recherche, setRecherche] = useState("");
@@ -323,28 +271,9 @@ export default function PhotosPage() {
   const [photoAffichee, setPhotoAffichee] =
     useState<Photo | null>(null);
 
-  useEffect(() => {
-    setPhotos(lirePhotos());
-    setLogements(lire<Logement>("logements"));
-    setDonneesChargees(true);
-  }, []);
+  
 
-  useEffect(() => {
-    if (!donneesChargees) return;
-
-    try {
-      window.localStorage.setItem(
-        CLE_STOCKAGE,
-        JSON.stringify(photos)
-      );
-
-      setErreurStockage("");
-    } catch {
-      setErreurStockage(
-        "Le stockage du navigateur est presque plein. Supprimez quelques photos avant d’en ajouter de nouvelles."
-      );
-    }
-  }, [photos, donneesChargees]);
+  
 
   useEffect(() => {
     if (!photoAffichee) return;
@@ -552,7 +481,7 @@ export default function PhotosPage() {
     );
   }
 
-  function enregistrerPhotos() {
+  async function enregistrerPhotos() {
     if (!logementId) {
       setErreur("Le logement est obligatoire.");
       return;
@@ -575,7 +504,7 @@ export default function PhotosPage() {
     const nouvellesPhotos: Photo[] =
       photosEnAttente.map(
         (photo, index): Photo => ({
-          id: creerIdentifiant("photo"),
+          id: photo.id,
           logementId,
           categorie,
           date: datePhoto,
@@ -592,15 +521,15 @@ export default function PhotosPage() {
         })
       );
 
-    setPhotos((liste) => [
-      ...nouvellesPhotos,
+    if (!(await remote.change((liste) => [
+      ...nouvellesPhotos.filter(photo => !liste.some(existing => existing.id === photo.id)),
       ...liste,
-    ]);
+    ]))) return;
 
     fermerFormulaire();
   }
 
-  function supprimerPhoto(photo: Photo) {
+  async function supprimerPhoto(photo: Photo) {
     const confirmation = window.confirm(
       `Supprimer définitivement la photo « ${
         photo.titre || photo.nomFichier
@@ -609,11 +538,10 @@ export default function PhotosPage() {
 
     if (!confirmation) return;
 
-    setPhotos((liste) =>
+    if (!(await remote.change((liste) =>
       liste.filter(
         (item) => item.id !== photo.id
-      )
-    );
+      )))) return;
 
     if (photoAffichee?.id === photo.id) {
       setPhotoAffichee(null);
@@ -632,7 +560,7 @@ export default function PhotosPage() {
     filtreLogement !== "Tous";
 
   return (
-    <div className="space-y-8">
+    <fieldset disabled={remote.busy || remote.loading} className="min-w-0">{remote.error && <p role="alert" className="mb-4 rounded-xl bg-red-50 p-4 text-red-700">{remote.error}</p>}{remote.busy && <p role="status">Enregistrement en cours…</p>}<div className="space-y-8">
       <PageHeader
         titre="Photos"
         description="Classez les photos des logements, états des lieux, ménages, incidents et travaux."
@@ -1087,7 +1015,7 @@ export default function PhotosPage() {
           </div>
         </div>
       )}
-    </div>
+    </div></fieldset>
   );
 }
 

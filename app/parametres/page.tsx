@@ -1,427 +1,83 @@
 "use client";
-
-import {
-  useEffect,
-  useState,
-  type ChangeEvent,
-} from "react";
-
+import { useEffect, useRef, useState, type ChangeEvent } from "react";
 import PageHeader from "@/components/ui/PageHeader";
 import Section from "@/components/ui/Section";
-
-type Parametres = {
-  nomEntreprise: string;
-  responsable: string;
-  email: string;
-  telephone: string;
-  adresse: string;
-  codePostal: string;
-  ville: string;
-  siret: string;
-  devise: string;
-  tauxTVA: number;
-  delaiPaiement: number;
-  prefixeFacture: string;
-  notesFacture: string;
-};
-
-type Sauvegarde = {
-  application: string;
-  version: number;
-  dateExport: string;
-  parametres: Parametres;
-  donnees: Record<string, unknown>;
-};
-
-const CLE_PARAMETRES = "cap-serein-parametres";
-
-const CLES_DONNEES = [
-  "cap-serein-logements",
-  "cap-serein-voyageurs",
-  "cap-serein-proprietaires",
-  "cap-serein-missions",
-  "cap-serein-factures",
-  "cap-serein-etats-des-lieux",
-  "cap-serein-cles",
-  "cap-serein-menages",
-  "cap-serein-pressings",
-  "cap-serein-photos",
-];
-
-const parametresParDefaut: Parametres = {
-  nomEntreprise: "Cap Serein",
-  responsable: "",
-  email: "",
-  telephone: "",
-  adresse: "",
-  codePostal: "",
-  ville: "La Seyne-sur-Mer",
-  siret: "",
-  devise: "EUR",
-  tauxTVA: 20,
-  delaiPaiement: 30,
-  prefixeFacture: "FAC",
-  notesFacture:
-    "Merci pour votre confiance. Paiement à effectuer à réception de la facture.",
-};
-
-function lireParametres(): Parametres {
-  if (typeof window === "undefined") {
-    return parametresParDefaut;
-  }
-
-  try {
-    const contenu =
-      window.localStorage.getItem(CLE_PARAMETRES);
-
-    if (!contenu) {
-      return parametresParDefaut;
-    }
-
-    const donnees = JSON.parse(
-      contenu
-    ) as Partial<Parametres>;
-
-    return {
-      ...parametresParDefaut,
-      ...donnees,
-      tauxTVA: Number(
-        donnees.tauxTVA ??
-          parametresParDefaut.tauxTVA
-      ),
-      delaiPaiement: Number(
-        donnees.delaiPaiement ??
-          parametresParDefaut.delaiPaiement
-      ),
-    };
-  } catch {
-    return parametresParDefaut;
-  }
-}
-
-function formaterDateFichier(): string {
-  const date = new Date();
-
-  const annee = date.getFullYear();
-  const mois = String(
-    date.getMonth() + 1
-  ).padStart(2, "0");
-  const jour = String(
-    date.getDate()
-  ).padStart(2, "0");
-  const heures = String(
-    date.getHours()
-  ).padStart(2, "0");
-  const minutes = String(
-    date.getMinutes()
-  ).padStart(2, "0");
-
-  return `${annee}-${mois}-${jour}_${heures}-${minutes}`;
-}
+import { supabase } from "@/lib/supabase";
+import { obtenirOrganisationCourante, messageErreurSupabase } from "@/lib/organization";
+import { lireParametres, ecrireParametres, parametresParDefaut, type Parametres } from "@/lib/settingsSupabase";
 
 export default function ParametresPage() {
-  const [parametres, setParametres] =
-    useState<Parametres>(
-      parametresParDefaut
-    );
-
-  const [donneesChargees, setDonneesChargees] =
-    useState(false);
-
+  const [parametres, setParametres] = useState<Parametres>(parametresParDefaut);
+  const [donneesChargees, setDonneesChargees] = useState(false);
+  const [chargementReussi, setChargementReussi] = useState(false);
   const [message, setMessage] = useState("");
   const [erreur, setErreur] = useState("");
-
+  const [busy, setBusy] = useState(false);
+  const lock = useRef(false);
   useEffect(() => {
-    setParametres(lireParametres());
-    setDonneesChargees(true);
+    let active = true;
+    lireParametres().then(p => { if (active) { setParametres(p); setChargementReussi(true); } })
+      .catch(e => { if (active) setErreur(messageErreurSupabase(e)); })
+      .finally(() => { if (active) setDonneesChargees(true); });
+    return () => { active = false; };
   }, []);
-
-  function afficherMessage(texte: string) {
-    setMessage(texte);
-    setErreur("");
-
-    window.setTimeout(() => {
-      setMessage("");
-    }, 4000);
+  async function executer(action: () => Promise<void>) {
+    if (lock.current || !chargementReussi) return;
+    lock.current = true; setBusy(true); setErreur(""); setMessage("");
+    try { await action(); } catch (cause) { setErreur(messageErreurSupabase(cause)); }
+    finally { lock.current = false; setBusy(false); }
   }
-
-  function afficherErreur(texte: string) {
-    setErreur(texte);
-    setMessage("");
+  async function enregistrerParametres() {
+    await executer(async () => {
+      if (!parametres.nomEntreprise.trim()) throw new Error("Le nom de l’entreprise est obligatoire.");
+      if (parametres.email && !parametres.email.includes("@")) throw new Error("Adresse e-mail incorrecte.");
+      if (!Number.isFinite(parametres.tauxTVA) || parametres.tauxTVA < 0 || !Number.isInteger(parametres.delaiPaiement) || parametres.delaiPaiement < 0)
+        throw new Error("TVA ou délai de paiement invalide.");
+      await ecrireParametres(parametres);
+      setMessage("Les paramètres ont été enregistrés.");
+    });
   }
-
-  function enregistrerParametres() {
-    if (!parametres.nomEntreprise.trim()) {
-      afficherErreur(
-        "Le nom de l’entreprise est obligatoire."
-      );
-      return;
-    }
-
-    if (
-      parametres.email &&
-      !parametres.email.includes("@")
-    ) {
-      afficherErreur(
-        "L’adresse e-mail semble incorrecte."
-      );
-      return;
-    }
-
-    const parametresFinaux: Parametres = {
-      ...parametres,
-      nomEntreprise:
-        parametres.nomEntreprise.trim(),
-      responsable:
-        parametres.responsable.trim(),
-      email: parametres.email.trim(),
-      telephone:
-        parametres.telephone.trim(),
-      adresse: parametres.adresse.trim(),
-      codePostal:
-        parametres.codePostal.trim(),
-      ville: parametres.ville.trim(),
-      siret: parametres.siret.trim(),
-      prefixeFacture:
-        parametres.prefixeFacture
-          .trim()
-          .toUpperCase(),
-      tauxTVA: Math.max(
-        0,
-        Number(parametres.tauxTVA || 0)
-      ),
-      delaiPaiement: Math.max(
-        0,
-        Number(
-          parametres.delaiPaiement || 0
-        )
-      ),
-      notesFacture:
-        parametres.notesFacture.trim(),
-    };
-
-    try {
-      window.localStorage.setItem(
-        CLE_PARAMETRES,
-        JSON.stringify(parametresFinaux)
-      );
-
-      setParametres(parametresFinaux);
-
-      afficherMessage(
-        "Les paramètres ont bien été enregistrés."
-      );
-    } catch {
-      afficherErreur(
-        "Impossible d’enregistrer les paramètres."
-      );
-    }
+  async function exporterDonnees() {
+    await executer(async () => {
+      const org = await obtenirOrganisationCourante();
+      const { data, error } = await supabase.rpc("exporter_organisation", { p_organization_id: org });
+      if (error) throw error;
+      const backup = { application: "Cap Serein Manager", version: 2, organizationId: org, dateExport: new Date().toISOString(), donnees: data };
+      const url = URL.createObjectURL(new Blob([JSON.stringify(backup, null, 2)], { type: "application/json" }));
+      const link = document.createElement("a"); link.href = url;
+      link.download = "cap-serein-sauvegarde-" + new Date().toISOString().replaceAll(":", "-") + ".json";
+      link.click(); setTimeout(() => URL.revokeObjectURL(url), 1000);
+      setMessage("Les données Supabase ont été exportées. Les fichiers médias restent dans leur stockage d’origine.");
+    });
   }
-
-  function exporterDonnees() {
-    const donnees: Record<string, unknown> = {};
-
-    for (const cle of CLES_DONNEES) {
-      const contenu =
-        window.localStorage.getItem(cle);
-
-      if (!contenu) {
-        donnees[cle] = [];
-        continue;
-      }
-
-      try {
-        donnees[cle] = JSON.parse(contenu);
-      } catch {
-        donnees[cle] = contenu;
-      }
-    }
-
-    const sauvegarde: Sauvegarde = {
-      application: "Cap Serein Manager",
-      version: 1,
-      dateExport: new Date().toISOString(),
-      parametres,
-      donnees,
-    };
-
-    const fichier = new Blob(
-      [
-        JSON.stringify(
-          sauvegarde,
-          null,
-          2
-        ),
-      ],
-      {
-        type: "application/json",
-      }
-    );
-
-    const url =
-      window.URL.createObjectURL(fichier);
-
-    const lien =
-      document.createElement("a");
-
-    lien.href = url;
-    lien.download = `cap-serein-sauvegarde-${formaterDateFichier()}.json`;
-
-    document.body.appendChild(lien);
-    lien.click();
-    lien.remove();
-
-    window.URL.revokeObjectURL(url);
-
-    afficherMessage(
-      "La sauvegarde a été exportée."
-    );
+  async function importerDonnees(event: ChangeEvent<HTMLInputElement>) {
+    const file = event.target.files?.[0]; event.target.value = "";
+    if (!file) return;
+    if (!window.confirm("Remplacer les données de votre organisation par cette sauvegarde Supabase ?")) return;
+    await executer(async () => {
+      const backup = JSON.parse(await file.text());
+      const org = await obtenirOrganisationCourante();
+      if (backup.application !== "Cap Serein Manager" || backup.version !== 2 || backup.organizationId !== org || !backup.donnees)
+        throw new Error("Utilisez une sauvegarde Supabase version 2 de cette organisation. Les anciennes sauvegardes navigateur nécessitent une conversion préalable.");
+      const { error } = await supabase.rpc("restaurer_organisation", { p_organization_id: org, p_donnees: backup.donnees });
+      if (error) throw error;
+      setParametres(await lireParametres()); setMessage("La sauvegarde a été restaurée.");
+    });
   }
-
-  async function importerDonnees(
-    event: ChangeEvent<HTMLInputElement>
-  ) {
-    const fichier = event.target.files?.[0];
-
-    event.target.value = "";
-
-    if (!fichier) return;
-
-    const confirmation = window.confirm(
-      "La restauration remplacera les données actuellement enregistrées. Continuer ?"
-    );
-
-    if (!confirmation) return;
-
-    try {
-      const contenu = await fichier.text();
-
-      const sauvegarde = JSON.parse(
-        contenu
-      ) as Partial<Sauvegarde>;
-
-      if (
-        sauvegarde.application !==
-          "Cap Serein Manager" ||
-        !sauvegarde.donnees ||
-        typeof sauvegarde.donnees !==
-          "object"
-      ) {
-        afficherErreur(
-          "Ce fichier n’est pas une sauvegarde valide de Cap Serein Manager."
-        );
-        return;
-      }
-
-      for (const cle of CLES_DONNEES) {
-        const valeur =
-          sauvegarde.donnees[cle];
-
-        if (valeur === undefined) {
-          continue;
-        }
-
-        window.localStorage.setItem(
-          cle,
-          JSON.stringify(valeur)
-        );
-      }
-
-      if (sauvegarde.parametres) {
-        const parametresRestaures = {
-          ...parametresParDefaut,
-          ...sauvegarde.parametres,
-        };
-
-        window.localStorage.setItem(
-          CLE_PARAMETRES,
-          JSON.stringify(
-            parametresRestaures
-          )
-        );
-
-        setParametres(
-          parametresRestaures
-        );
-      }
-
-      afficherMessage(
-        "La sauvegarde a été restaurée. La page va être actualisée."
-      );
-
-      window.setTimeout(() => {
-        window.location.reload();
-      }, 1500);
-    } catch {
-      afficherErreur(
-        "Le fichier sélectionné est illisible ou endommagé."
-      );
-    }
+  async function reinitialiserParametres() {
+    if (!window.confirm("Réinitialiser les paramètres de l’entreprise ?")) return;
+    await executer(async () => { await ecrireParametres(parametresParDefaut); setParametres(parametresParDefaut); setMessage("Paramètres réinitialisés."); });
   }
-
-  function reinitialiserParametres() {
-    const confirmation = window.confirm(
-      "Réinitialiser uniquement les paramètres de l’entreprise ? Les logements, voyageurs et autres données seront conservés."
-    );
-
-    if (!confirmation) return;
-
-    window.localStorage.setItem(
-      CLE_PARAMETRES,
-      JSON.stringify(
-        parametresParDefaut
-      )
-    );
-
-    setParametres(
-      parametresParDefaut
-    );
-
-    afficherMessage(
-      "Les paramètres ont été réinitialisés."
-    );
+  async function supprimerToutesLesDonnees() {
+    if (!window.confirm("Supprimer les données métier de toute votre organisation ? Les comptes, paramètres et fichiers médias seront conservés.")) return;
+    if (window.prompt("Écrivez SUPPRIMER pour confirmer") !== "SUPPRIMER") return;
+    await executer(async () => {
+      const org = await obtenirOrganisationCourante();
+      const { error } = await supabase.rpc("effacer_donnees_organisation", { p_organization_id: org });
+      if (error) throw error;
+      setMessage("Les données métier ont été supprimées. Les comptes, paramètres et fichiers médias sont conservés.");
+    });
   }
-
-  function supprimerToutesLesDonnees() {
-    const premiereConfirmation =
-      window.confirm(
-        "Cette action supprimera définitivement les logements, voyageurs, missions, factures, photos et toutes les autres données. Continuer ?"
-      );
-
-    if (!premiereConfirmation) return;
-
-    const texte = window.prompt(
-      "Pour confirmer, écrivez exactement : SUPPRIMER"
-    );
-
-    if (texte !== "SUPPRIMER") {
-      afficherErreur(
-        "Suppression annulée : le texte de confirmation est incorrect."
-      );
-      return;
-    }
-
-    for (const cle of CLES_DONNEES) {
-      window.localStorage.removeItem(cle);
-    }
-
-    window.localStorage.removeItem(
-      "cap-serein-menage"
-    );
-
-    window.localStorage.removeItem(
-      "cap-serein-pressing"
-    );
-
-    afficherMessage(
-      "Toutes les données ont été supprimées. La page va être actualisée."
-    );
-
-    window.setTimeout(() => {
-      window.location.href = "/";
-    }, 1500);
-  }
-
   if (!donneesChargees) {
     return (
       <div className="rounded-3xl border border-slate-200 bg-white p-16 text-center">
@@ -436,6 +92,8 @@ export default function ParametresPage() {
 
   return (
     <div className="space-y-8">
+      {busy && <p role="status">Opération en cours…</p>}
+      <fieldset disabled={busy || !chargementReussi} className="min-w-0 space-y-8">
       <PageHeader
         titre="Paramètres"
         description="Configurez les informations de votre entreprise et gérez la sauvegarde de vos données."
@@ -723,7 +381,7 @@ export default function ParametresPage() {
             </h3>
 
             <p className="mt-2 text-sm leading-6 text-violet-800">
-              Importez un fichier précédemment exporté. Les
+              Administrateur : importez une sauvegarde Supabase de cette organisation. Les
               données actuelles seront remplacées.
             </p>
 
@@ -747,13 +405,13 @@ export default function ParametresPage() {
       >
         <div className="rounded-3xl border border-red-200 bg-red-50 p-6">
           <h3 className="text-xl font-black text-red-950">
-            Supprimer toutes les données
+            Supprimer les données métier
           </h3>
 
           <p className="mt-2 max-w-3xl text-sm leading-6 text-red-800">
             Cette action supprimera les logements, propriétaires,
             voyageurs, missions, états des lieux, clés, ménages,
-            prestations de pressing, factures et photos.
+            prestations de pressing, factures et références des photos. Les fichiers médias, comptes et paramètres sont conservés.
           </p>
 
           <button
@@ -763,10 +421,12 @@ export default function ParametresPage() {
             }
             className="mt-6 rounded-2xl bg-red-600 px-5 py-3 font-bold text-white hover:bg-red-700"
           >
-            Supprimer toutes les données
+            Supprimer les données métier
           </button>
         </div>
       </Section>
+      </fieldset>
+      {!chargementReussi && <p role="alert">{erreur}</p>}
     </div>
   );
 }

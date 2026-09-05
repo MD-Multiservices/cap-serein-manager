@@ -1,6 +1,9 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useState } from "react";
+import { lireParametres } from "@/lib/settingsSupabase";
+import { supabase } from "@/lib/supabase";
+import { obtenirOrganisationCourante } from "@/lib/organization";
 
 import {
   genererEtatDesLieuxPdf,
@@ -24,19 +27,6 @@ type ActionsPdfProps = {
   etat: EtatAvecLogement;
 };
 
-function objet(
-  valeur: unknown
-): Record<string, unknown> {
-  if (
-    valeur &&
-    typeof valeur === "object" &&
-    !Array.isArray(valeur)
-  ) {
-    return valeur as Record<string, unknown>;
-  }
-
-  return {};
-}
 
 function texte(
   valeur: unknown
@@ -51,146 +41,25 @@ function texte(
   return String(valeur).trim();
 }
 
-function premiereValeur(
-  ...valeurs: unknown[]
-): string {
-  for (const valeur of valeurs) {
-    const resultat = texte(valeur);
 
-    if (resultat) {
-      return resultat;
+async function trouverInformationsEntreprise(): Promise<InformationsEntreprisePdf> {
+  const p = await lireParametres();
+  return { nom: p.nomEntreprise, email: p.email, telephone: p.telephone,
+    adresse: [p.adresse, p.codePostal, p.ville].filter(Boolean).join(" "), logoUrl: "/logo-cap-serein.jpg" };
+}
+async function trouverCoordonneesEnvoi(etat: EtatAvecLogement, entreprise: InformationsEntreprisePdf): Promise<CoordonneesEnvoi> {
+  const org = await obtenirOrganisationCourante();
+  let emailProprietaire = "";
+  if (etat.logementId) {
+    const logement = await supabase.from("logements").select("proprietaire_id").eq("organization_id", org).eq("id", etat.logementId).maybeSingle();
+    if (logement.error) throw logement.error;
+    if (logement.data?.proprietaire_id) {
+      const p = await supabase.from("proprietaires").select("email").eq("organization_id", org).eq("id", logement.data.proprietaire_id).maybeSingle();
+      if (p.error) throw p.error;
+      emailProprietaire = p.data?.email || "";
     }
   }
-
-  return "";
-}
-
-function lireStockage(
-  cle: string
-): unknown {
-  try {
-    const valeur =
-      window.localStorage.getItem(cle);
-
-    if (!valeur) {
-      return null;
-    }
-
-    return JSON.parse(valeur);
-  } catch {
-    return null;
-  }
-}
-
-function trouverInformationsEntreprise(): InformationsEntreprisePdf {
-  const parametres = objet(
-    lireStockage(
-      "cap-serein-parametres"
-    )
-  );
-
-  const entreprise = objet(
-    parametres.entreprise
-  );
-
-  return {
-    nom:
-      premiereValeur(
-        parametres.nomEntreprise,
-        entreprise.nom,
-        parametres.nom,
-        "Cap Serein"
-      ) || "Cap Serein",
-
-    email: premiereValeur(
-      parametres.emailEntreprise,
-      entreprise.email,
-      parametres.email
-    ),
-
-    telephone: premiereValeur(
-      parametres.telephoneEntreprise,
-      entreprise.telephone,
-      parametres.telephone
-    ),
-
-    adresse: premiereValeur(
-      parametres.adresseEntreprise,
-      entreprise.adresse,
-      parametres.adresse
-    ),
-
-    logoUrl:
-      premiereValeur(
-        parametres.logoUrl,
-        entreprise.logoUrl
-      ) ||
-      "/logo-cap-serein.jpg",
-  };
-}
-
-function trouverCoordonneesEnvoi(
-  etat: EtatAvecLogement,
-  entreprise: InformationsEntreprisePdf
-): CoordonneesEnvoi {
-  const logementsBruts =
-    lireStockage(
-      "cap-serein-logements"
-    );
-
-  const proprietairesBruts =
-    lireStockage(
-      "cap-serein-proprietaires"
-    );
-
-  const logements =
-    Array.isArray(logementsBruts)
-      ? logementsBruts.map(objet)
-      : [];
-
-  const proprietaires =
-    Array.isArray(proprietairesBruts)
-      ? proprietairesBruts.map(objet)
-      : [];
-
-  const logement = logements.find(
-    (element) =>
-      texte(element.id) ===
-      texte(etat.logementId)
-  );
-
-  const proprietaireId =
-    premiereValeur(
-      logement?.proprietaireId,
-      logement?.idProprietaire
-    );
-
-  const proprietaire =
-    proprietaires.find(
-      (element) =>
-        texte(element.id) ===
-        proprietaireId
-    );
-
-  const proprietaireObjet =
-    objet(logement?.proprietaire);
-
-  return {
-    emailProprietaire:
-      premiereValeur(
-        logement?.emailProprietaire,
-        logement?.proprietaireEmail,
-        logement?.email,
-        proprietaireObjet.email,
-        proprietaire?.email
-      ),
-
-    emailVoyageur:
-      texte(etat.voyageurEmail),
-
-    emailEntreprise:
-      texte(entreprise.email),
-  };
+  return { emailProprietaire, emailVoyageur: texte(etat.voyageurEmail), emailEntreprise: entreprise.email };
 }
 
 function emailsUniques(
@@ -286,7 +155,7 @@ export default function ActionsPdf({
 
     try {
       const entreprise =
-        trouverInformationsEntreprise();
+        await trouverInformationsEntreprise();
 
       const resultat =
         await genererEtatDesLieuxPdf(
@@ -422,10 +291,10 @@ export default function ActionsPdf({
     );
 
     const entreprise =
-      trouverInformationsEntreprise();
+      await trouverInformationsEntreprise();
 
     const coordonnees =
-      trouverCoordonneesEnvoi(
+      await trouverCoordonneesEnvoi(
         etat,
         entreprise
       );
@@ -508,26 +377,16 @@ export default function ActionsPdf({
     }, 500);
   }
 
-  const entreprise =
-    typeof window !== "undefined"
-      ? trouverInformationsEntreprise()
-      : {
-          nom: "Cap Serein",
-          email: "",
-        };
-
-  const coordonnees =
-    typeof window !== "undefined"
-      ? trouverCoordonneesEnvoi(
-          etat,
-          entreprise
-        )
-      : {
-          emailProprietaire: "",
-          emailVoyageur:
-            etat.voyageurEmail,
-          emailEntreprise: "",
-        };
+  const [coordonnees, setCoordonnees] = useState<CoordonneesEnvoi>({
+    emailProprietaire: "", emailVoyageur: etat.voyageurEmail, emailEntreprise: "",
+  });
+  useEffect(() => {
+    let actif = true;
+    trouverInformationsEntreprise().then(entreprise => trouverCoordonneesEnvoi(etat, entreprise))
+      .then(valeur => { if (actif) setCoordonnees(valeur); })
+      .catch(cause => { if (actif) setErreur(cause instanceof Error ? cause.message : "Coordonnées indisponibles."); });
+    return () => { actif = false; };
+  }, [etat]);
 
   return (
     <section className="rounded-3xl border border-slate-200 bg-white p-5 shadow-sm sm:p-7">
@@ -625,7 +484,7 @@ export default function ActionsPdf({
 
               <button
                 type="button"
-                onClick={preparerEmail}
+                onClick={() => { void preparerEmail().catch(cause => setErreur(cause instanceof Error ? cause.message : "Impossible de préparer l’e-mail.")); }}
                 className="min-h-14 rounded-2xl bg-violet-600 px-5 py-3 font-black text-white sm:col-span-2 xl:col-span-1"
               >
                 ✉ Préparer l’e-mail

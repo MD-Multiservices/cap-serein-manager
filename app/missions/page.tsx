@@ -9,11 +9,6 @@ import {
 import PageHeader from "@/components/ui/PageHeader";
 import Section from "@/components/ui/Section";
 
-import {
-  enregistrer,
-  lire,
-} from "@/lib/database";
-
 import { supabase } from "@/lib/supabase";
 
 import type {
@@ -235,80 +230,6 @@ function normaliserHeure(
   return "";
 }
 
-function normaliserMissionLocale(
-  valeur: Partial<Mission>
-): Mission {
-  const maintenant =
-    new Date().toISOString();
-
-  return {
-    ...creerMissionVide(),
-    ...valeur,
-
-    id: String(
-      valeur.id ||
-        creerIdentifiant()
-    ),
-
-    logementId: String(
-      valeur.logementId || ""
-    ),
-
-    proprietaireId: String(
-      valeur.proprietaireId || ""
-    ),
-
-    voyageurId: String(
-      valeur.voyageurId || ""
-    ),
-
-    type:
-      normaliserType(
-        valeur.type
-      ),
-
-    titre: String(
-      valeur.titre || ""
-    ),
-
-    description: String(
-      valeur.description || ""
-    ),
-
-    date: String(
-      valeur.date || ""
-    ),
-
-    heure:
-      normaliserHeure(
-        valeur.heure
-      ),
-
-    priorite:
-      normaliserPriorite(
-        valeur.priorite
-      ),
-
-    statut:
-      normaliserStatut(
-        valeur.statut
-      ),
-
-    assigneA: String(
-      valeur.assigneA || ""
-    ),
-
-    createdAt: String(
-      valeur.createdAt ||
-        maintenant
-    ),
-
-    updatedAt: String(
-      valeur.updatedAt ||
-        maintenant
-    ),
-  };
-}
 
 export default function MissionsPage() {
   const [
@@ -543,29 +464,6 @@ export default function MissionsPage() {
     };
   }, []);
 
-  /*
-   * Supabase est maintenant la source principale.
-   *
-   * On conserve une copie locale temporaire
-   * pour Planning et États des lieux tant que
-   * ces modules ne sont pas encore migrés.
-   */
-  useEffect(() => {
-    if (
-      !donneesChargees
-    ) {
-      return;
-    }
-
-    enregistrer(
-      "missions",
-      missions
-    );
-  }, [
-    missions,
-    donneesChargees,
-  ]);
-
   async function chargerLogements(
     orgId: string
   ): Promise<Logement[]> {
@@ -722,57 +620,6 @@ export default function MissionsPage() {
     const lignes =
       (data ||
         []) as MissionSupabase[];
-
-    if (
-      autoriserMigration &&
-      lignes.length === 0
-    ) {
-      const missionsLocales =
-        lire<
-          Partial<Mission>
-        >("missions")
-          .map(
-            normaliserMissionLocale
-          )
-          .filter(
-            (mission) =>
-              mission.titre.trim() !==
-              ""
-          );
-
-      if (
-        missionsLocales.length >
-        0
-      ) {
-        const logementsLocaux =
-          lire<LogementLocal>(
-            "logements"
-          );
-
-        const voyageursLocaux =
-          lire<VoyageurLocal>(
-            "voyageurs"
-          );
-
-        await importerMissionsLocales(
-          orgId,
-          missionsLocales,
-          logementsLocaux,
-          voyageursLocaux,
-          logementsDistants,
-          voyageursDistants
-        );
-
-        await chargerMissions(
-          orgId,
-          logementsDistants,
-          voyageursDistants,
-          false
-        );
-
-        return true;
-      }
-    }
 
     const missionsConverties =
       lignes.map(
@@ -996,127 +843,6 @@ export default function MissionsPage() {
       : null;
   }
 
-  async function importerMissionsLocales(
-    orgId: string,
-    missionsLocales: Mission[],
-    logementsLocaux: LogementLocal[],
-    voyageursLocaux: VoyageurLocal[],
-    logementsDistants: Logement[],
-    voyageursDistants: Voyageur[]
-  ) {
-    for (
-      const mission of missionsLocales
-    ) {
-      const logement =
-        trouverLogementDistant(
-          mission.logementId,
-          logementsLocaux,
-          logementsDistants
-        );
-
-      const voyageur =
-        trouverVoyageurDistant(
-          mission.voyageurId,
-          voyageursLocaux,
-          voyageursDistants
-        );
-
-      const dateDebut =
-        mission.date &&
-        mission.heure
-          ? `${mission.date}T${mission.heure}:00`
-          : null;
-
-      const payload: Record<
-        string,
-        unknown
-      > = {
-        organization_id:
-          orgId,
-
-        logement_id:
-          logement?.id ||
-          null,
-
-        proprietaire_id:
-          logement?.proprietaireId ||
-          null,
-
-        voyageur_id:
-          voyageur?.id ||
-          null,
-
-        type_mission:
-          mission.type,
-
-        titre:
-          mission.titre.trim(),
-
-        description:
-          mission.description.trim() ||
-          null,
-
-        observations:
-          mission.description.trim() ||
-          null,
-
-        date_mission:
-          mission.date ||
-          null,
-
-        heure_mission:
-          mission.heure ||
-          null,
-
-        date_debut:
-          dateDebut,
-
-        priorite:
-          mission.priorite,
-
-        statut:
-          mission.statut,
-
-        assigne_a:
-          mission.assigneA.trim() ||
-          null,
-      };
-
-      if (
-        mission.id &&
-        estUuid(
-          mission.id
-        )
-      ) {
-        payload.id =
-          mission.id;
-      }
-
-      if (
-        mission.createdAt
-      ) {
-        payload.created_at =
-          mission.createdAt;
-      }
-
-      if (
-        mission.updatedAt
-      ) {
-        payload.updated_at =
-          mission.updatedAt;
-      }
-
-      const {
-        error,
-      } = await supabase
-        .from("missions")
-        .insert(payload);
-
-      if (error) {
-        throw error;
-      }
-    }
-  }
 
   const statistiques =
     useMemo(() => {

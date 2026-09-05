@@ -1,11 +1,11 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import { useMemo, useState } from "react";
 import type { ReactNode } from "react";
 
 import PageHeader from "@/components/ui/PageHeader";
 import Section from "@/components/ui/Section";
-import { enregistrer, lire } from "@/lib/database";
+import { useRemoteCollection } from "@/lib/useRemoteCollection";
 
 type TypeMenage =
   | "Ménage d’entrée"
@@ -16,7 +16,6 @@ type TypeMenage =
 
 type StatutMenage =
   | "À planifier"
-  | "Planifié"
   | "En cours"
   | "Terminé"
   | "Annulé";
@@ -74,7 +73,6 @@ const typesMenage: TypeMenage[] = [
 
 const statutsMenage: StatutMenage[] = [
   "À planifier",
-  "Planifié",
   "En cours",
   "Terminé",
   "Annulé",
@@ -180,7 +178,7 @@ function normaliserStatut(valeur: unknown): StatutMenage {
   }
 
   if (statut === "Planifiée" || statut === "Prévu") {
-    return "Planifié";
+    return "À planifier";
   }
 
   if (statut === "Annulée") {
@@ -190,47 +188,8 @@ function normaliserStatut(valeur: unknown): StatutMenage {
   return "À planifier";
 }
 
-function normaliserMenage(item: AncienMenage): Menage {
-  const maintenant = new Date().toISOString();
 
-  return {
-    ...creerMenageVide(),
-    ...item,
-    id: item.id || creerIdentifiant(),
-    logementId: item.logementId || item.logement || "",
-    voyageurId: item.voyageurId || item.voyageur || "",
-    type: normaliserType(item.type || item.mission),
-    statut: normaliserStatut(item.statut),
-    prestataire: item.prestataire || item.personne || "",
-    cout: Math.max(0, Number(item.cout || item.prix || 0)),
-    duree: Math.max(0.5, Number(item.duree || 2)),
-    linge: Boolean(item.linge),
-    controleEffectue: Boolean(
-      item.controleEffectue || item.controle
-    ),
-    consignes: item.consignes || item.notes || "",
-    createdAt: item.createdAt || maintenant,
-    updatedAt: item.updatedAt || maintenant,
-  };
-}
 
-function lireAnciennesDonnees(): AncienMenage[] {
-  if (typeof window === "undefined") return [];
-
-  try {
-    const contenu = window.localStorage.getItem(
-      "cap-serein-menage"
-    );
-
-    if (!contenu) return [];
-
-    const donnees = JSON.parse(contenu);
-
-    return Array.isArray(donnees) ? donnees : [];
-  } catch {
-    return [];
-  }
-}
 
 function formaterPrix(montant: number): string {
   return new Intl.NumberFormat("fr-FR", {
@@ -240,9 +199,10 @@ function formaterPrix(montant: number): string {
 }
 
 export default function MenagePage() {
-  const [menages, setMenages] = useState<Menage[]>([]);
-  const [logements, setLogements] = useState<Logement[]>([]);
-  const [voyageurs, setVoyageurs] = useState<Voyageur[]>([]);
+  const remote = useRemoteCollection<Menage>("menages");
+  const menages = remote.items;
+  const logements = (remote.references.logements || []) as unknown as Logement[];
+  const voyageurs = (remote.references.voyageurs || []) as unknown as Voyageur[];
 
   const [menageEnCours, setMenageEnCours] =
     useState<Menage>(creerMenageVide());
@@ -250,8 +210,7 @@ export default function MenagePage() {
   const [formulaireOuvert, setFormulaireOuvert] =
     useState(false);
 
-  const [donneesChargees, setDonneesChargees] =
-    useState(false);
+  const donneesChargees = !remote.loading;
 
   const [erreur, setErreur] = useState("");
   const [recherche, setRecherche] = useState("");
@@ -265,35 +224,9 @@ export default function MenagePage() {
   const [filtreLogement, setFiltreLogement] =
     useState("Tous");
 
-  useEffect(() => {
-    const donneesActuelles =
-      lire<AncienMenage>("menages");
+  
 
-    const anciennesDonnees = lireAnciennesDonnees();
-
-    const donneesFusionnees = [
-      ...donneesActuelles,
-      ...anciennesDonnees,
-    ]
-      .map(normaliserMenage)
-      .filter(
-        (menage, index, liste) =>
-          liste.findIndex(
-            (item) => item.id === menage.id
-          ) === index
-      );
-
-    setMenages(donneesFusionnees);
-    setLogements(lire<Logement>("logements"));
-    setVoyageurs(lire<Voyageur>("voyageurs"));
-    setDonneesChargees(true);
-  }, []);
-
-  useEffect(() => {
-    if (!donneesChargees) return;
-
-    enregistrer("menages", menages);
-  }, [menages, donneesChargees]);
+  
 
   const statistiques = useMemo(() => {
     const aujourdHui = dateLocaleISO();
@@ -317,7 +250,6 @@ export default function MenagePage() {
       aRealiser: menages.filter(
         (menage) =>
           menage.statut === "À planifier" ||
-          menage.statut === "Planifié" ||
           menage.statut === "En cours"
       ).length,
 
@@ -464,7 +396,7 @@ export default function MenagePage() {
     setFormulaireOuvert(false);
   }
 
-  function sauvegarderMenage() {
+  async function sauvegarderMenage() {
     if (!menageEnCours.logementId) {
       setErreur("Le logement est obligatoire.");
       return;
@@ -489,7 +421,7 @@ export default function MenagePage() {
 
     const maintenant = new Date().toISOString();
 
-    setMenages((liste) => {
+    if (!(await remote.change((liste) => {
       const existe = liste.some(
         (menage) => menage.id === menageEnCours.id
       );
@@ -527,32 +459,31 @@ export default function MenagePage() {
       }
 
       return [menageFinal, ...liste];
-    });
+    }))) return;
 
     fermerFormulaire();
   }
 
-  function supprimerMenage(menage: Menage) {
+  async function supprimerMenage(menage: Menage) {
     const confirmation = window.confirm(
       `Supprimer définitivement ce ménage prévu le ${menage.date} ?`
     );
 
     if (!confirmation) return;
 
-    setMenages((liste) =>
+    if (!(await remote.change((liste) =>
       liste.filter(
         (item) => item.id !== menage.id
-      )
-    );
+      )))) return;
   }
 
-  function changerStatut(
+  async function changerStatut(
     id: string,
     statut: StatutMenage
   ) {
     const maintenant = new Date().toISOString();
 
-    setMenages((liste) =>
+    if (!(await remote.change((liste) =>
       liste.map((menage) =>
         menage.id === id
           ? {
@@ -561,17 +492,16 @@ export default function MenagePage() {
               updatedAt: maintenant,
             }
           : menage
-      )
-    );
+      )))) return;
   }
 
-  function changerControle(
+  async function changerControle(
     id: string,
     controleEffectue: boolean
   ) {
     const maintenant = new Date().toISOString();
 
-    setMenages((liste) =>
+    if (!(await remote.change((liste) =>
       liste.map((menage) =>
         menage.id === id
           ? {
@@ -580,8 +510,7 @@ export default function MenagePage() {
               updatedAt: maintenant,
             }
           : menage
-      )
-    );
+      )))) return;
   }
 
   function reinitialiserFiltres() {
@@ -598,7 +527,7 @@ export default function MenagePage() {
     filtreLogement !== "Tous";
 
   return (
-    <div className="space-y-8">
+    <fieldset disabled={remote.busy || remote.loading} className="min-w-0">{remote.error && <p role="alert" className="mb-4 rounded-xl bg-red-50 p-4 text-red-700">{remote.error}</p>}{remote.busy && <p role="status">Enregistrement en cours…</p>}<div className="space-y-8">
       <PageHeader
         titre="Ménage"
         description="Planifiez les interventions, les prestataires, le linge et les contrôles qualité."
@@ -1076,7 +1005,7 @@ export default function MenagePage() {
           />
         )}
       </Section>
-    </div>
+    </div></fieldset>
   );
 }
 
@@ -1103,7 +1032,6 @@ function CarteMenage({
   > = {
     "À planifier":
       "bg-orange-100 text-orange-700",
-    Planifié: "bg-blue-100 text-blue-700",
     "En cours":
       "bg-violet-100 text-violet-700",
     Terminé:

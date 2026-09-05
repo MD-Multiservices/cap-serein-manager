@@ -14,7 +14,7 @@ import ValidationSignatures, {
   type DonneesValidation,
 } from "@/components/etats-des-lieux/ValidationSignatures";
 import ActionsPdf from "@/components/etats-des-lieux/ActionsPdf";
-import { lire } from "@/lib/database";
+
 import {
   chargerClesEdl,
   chargerEnteteEdl,
@@ -1103,64 +1103,9 @@ export default function FicheEtatDesLieuxPage() {
             logementSnapshot.nombre_chambres
           );
 
-        const listeLocale =
-          lire<Record<string, unknown>>(
-            "etatsDesLieux"
-          );
-
-        let elementLocal =
-          listeLocale.find(
-            (item) =>
-              texte(item.id) === missionId ||
-              texte(item.missionId) ===
-                missionId
-          );
-
-        /*
-         * Pour les anciens EDL dont l'identifiant
-         * local n'était pas un UUID, on tente une
-         * correspondance métier afin de récupérer
-         * les photos et signatures locales.
-         */
-        if (!elementLocal) {
-          elementLocal =
-            listeLocale.find((item) => {
-              const memeLogement =
-                texte(item.logementId) ===
-                entete.logementId;
-
-              const memeVoyageur =
-                !entete.voyageurId ||
-                texte(item.voyageurId) ===
-                  entete.voyageurId;
-
-              const memeType =
-                (texte(item.type) ===
-                  "sortie"
-                  ? "sortie"
-                  : "entree") ===
-                entete.type;
-
-              const memeDate =
-                !datePrevue.date ||
-                texte(item.date) ===
-                  datePrevue.date;
-
-              return (
-                memeLogement &&
-                memeVoyageur &&
-                memeType &&
-                memeDate
-              );
-            });
-        }
-
-        const local =
-          elementLocal || {};
-
-        const zonesLocales =
+        const zonesParDefaut =
           normaliserZones(
-            local.zones,
+            undefined,
             nombreChambres
           );
 
@@ -1170,7 +1115,7 @@ export default function FicheEtatDesLieuxPage() {
             ? zonesDistantes.map(
                 (zone) => {
                   const locale =
-                    zonesLocales.find(
+                    zonesParDefaut.find(
                       (candidate) =>
                         candidate.id ===
                           zone.id ||
@@ -1227,27 +1172,27 @@ export default function FicheEtatDesLieuxPage() {
                   };
                 }
               )
-            : zonesLocales;
+            : zonesParDefaut;
 
-        const compteursLocaux =
-          objet(local.compteurs);
+        const compteursVides =
+          objet(undefined);
 
         const compteurs = {
           electricite:
             creerReleve(
-              compteursLocaux.electricite
+              compteursVides.electricite
             ),
           eauFroide:
             creerReleve(
-              compteursLocaux.eauFroide
+              compteursVides.eauFroide
             ),
           eauChaude:
             creerReleve(
-              compteursLocaux.eauChaude
+              compteursVides.eauChaude
             ),
           gaz:
             creerReleve(
-              compteursLocaux.gaz
+              compteursVides.gaz
             ),
         };
 
@@ -1281,21 +1226,21 @@ export default function FicheEtatDesLieuxPage() {
           }
         }
 
-        const clesLocales =
-          objet(local.cles);
+        const clesVides =
+          objet(undefined);
 
         const cles = {
           nombreJeux: nombre(
-            clesLocales.nombreJeux
+            clesVides.nombreJeux
           ),
           nombreBadges: nombre(
-            clesLocales.nombreBadges
+            clesVides.nombreBadges
           ),
           nombreTelecommandes: nombre(
-            clesLocales.nombreTelecommandes
+            clesVides.nombreTelecommandes
           ),
           observations: texte(
-            clesLocales.observations
+            clesVides.observations
           ),
         };
 
@@ -1334,7 +1279,7 @@ export default function FicheEtatDesLieuxPage() {
 
         const logementNom =
           texte(logementSnapshot.nom) ||
-          texte(local.logementNom) ||
+          texte(undefined) ||
           "Logement non renseigné";
 
         const typeLogement =
@@ -1344,14 +1289,14 @@ export default function FicheEtatDesLieuxPage() {
           texte(
             logementSnapshot.type_logement
           ) ||
-          texte(local.typeLogement);
+          texte(undefined);
 
         const superficie =
           nombre(logementSnapshot.superficie) ||
           nombre(
             logementSnapshot.superficie_m2
           ) ||
-          nombre(local.superficie);
+          nombre(undefined);
 
         const adresseLogement =
           texte(
@@ -1376,7 +1321,7 @@ export default function FicheEtatDesLieuxPage() {
           ]
             .filter(Boolean)
             .join(", ") ||
-          texte(local.adresseLogement);
+          texte(undefined);
 
         const voyageurNom =
           texte(
@@ -1391,12 +1336,12 @@ export default function FicheEtatDesLieuxPage() {
           ]
             .filter(Boolean)
             .join(" ") ||
-          texte(local.voyageurNom) ||
+          texte(undefined) ||
           "Voyageur non renseigné";
 
         const validationLocale =
           creerValidation(
-            local.validation,
+            undefined,
             voyageurNom
           );
 
@@ -1474,7 +1419,6 @@ export default function FicheEtatDesLieuxPage() {
 
         const fiche =
           normaliserEtatDesLieux({
-            ...local,
 
             id: entete.id,
 
@@ -1501,25 +1445,25 @@ export default function FicheEtatDesLieuxPage() {
                 voyageurSnapshot.telephone
               ) ||
               texte(
-                local.voyageurTelephone
+                undefined
               ),
 
             voyageurEmail:
               texte(
                 voyageurSnapshot.email
               ) ||
-              texte(local.voyageurEmail),
+              texte(undefined),
 
             type: entete.type,
             statut: entete.statut,
 
             date:
               datePrevue.date ||
-              texte(local.date),
+              texte(undefined),
 
             heure:
               datePrevue.heure ||
-              texte(local.heure),
+              texte(undefined),
 
             notesPreparation:
               entete.notesPreparation,
@@ -1547,7 +1491,7 @@ export default function FicheEtatDesLieuxPage() {
               entete.dateFin,
 
             dateSignature:
-              texte(local.dateSignature),
+              texte(undefined),
 
             dateCreation:
               entete.createdAt,
@@ -1865,43 +1809,11 @@ export default function FicheEtatDesLieuxPage() {
         )
       );
 
-      /*
-       * Photos et signatures restent temporairement
-       * dans le miroir local jusqu'à leur migration
-       * vers Supabase Storage / les colonnes dédiées.
-       */
-      const listeLocale =
-        lire<Record<string, unknown>>(
-          "etatsDesLieux"
-        );
-
       const versionSauvegardee = {
         ...etat,
-        validation:
-          validationSauvegardee,
+        validation: validationSauvegardee,
         dateModification: new Date().toISOString(),
       };
-
-      const indexLocal = listeLocale.findIndex(
-        (element) =>
-          texte(element.id) === etat.id ||
-          texte(element.missionId) === etat.id ||
-          texte(element.id) === etat.missionId ||
-          texte(element.missionId) === etat.missionId
-      );
-
-      const nouvelleListe = [...listeLocale];
-
-      if (indexLocal >= 0) {
-        nouvelleListe[indexLocal] = versionSauvegardee;
-      } else {
-        nouvelleListe.unshift(versionSauvegardee);
-      }
-
-      window.localStorage.setItem(
-        "cap-serein-etats-des-lieux",
-        JSON.stringify(nouvelleListe)
-      );
 
       setSignatureVoyageurPath(
         nouveauSignatureVoyageurPath

@@ -1,0 +1,1928 @@
+[
+  {
+    "table_name": "edl_photos",
+    "type_element": "COLUMN",
+    "nom": "commentaire",
+    "definition": "text"
+  },
+  {
+    "table_name": "edl_photos",
+    "type_element": "COLUMN",
+    "nom": "created_at",
+    "definition": "timestamp with time zone NOT NULL DEFAULT now()"
+  },
+  {
+    "table_name": "edl_photos",
+    "type_element": "COLUMN",
+    "nom": "date_prise_vue",
+    "definition": "timestamp with time zone NOT NULL DEFAULT now()"
+  },
+  {
+    "table_name": "edl_photos",
+    "type_element": "COLUMN",
+    "nom": "etat_des_lieux_id",
+    "definition": "uuid NOT NULL"
+  },
+  {
+    "table_name": "edl_photos",
+    "type_element": "COLUMN",
+    "nom": "id",
+    "definition": "uuid NOT NULL DEFAULT gen_random_uuid()"
+  },
+  {
+    "table_name": "edl_photos",
+    "type_element": "COLUMN",
+    "nom": "mime_type",
+    "definition": "text"
+  },
+  {
+    "table_name": "edl_photos",
+    "type_element": "COLUMN",
+    "nom": "nom_fichier",
+    "definition": "text"
+  },
+  {
+    "table_name": "edl_photos",
+    "type_element": "COLUMN",
+    "nom": "ordre",
+    "definition": "integer NOT NULL DEFAULT 0"
+  },
+  {
+    "table_name": "edl_photos",
+    "type_element": "COLUMN",
+    "nom": "organization_id",
+    "definition": "uuid NOT NULL"
+  },
+  {
+    "table_name": "edl_photos",
+    "type_element": "COLUMN",
+    "nom": "storage_path",
+    "definition": "text NOT NULL"
+  },
+  {
+    "table_name": "edl_photos",
+    "type_element": "COLUMN",
+    "nom": "taille_octets",
+    "definition": "bigint"
+  },
+  {
+    "table_name": "edl_photos",
+    "type_element": "COLUMN",
+    "nom": "zone_id",
+    "definition": "uuid"
+  },
+  {
+    "table_name": "edl_photos",
+    "type_element": "CONSTRAINT",
+    "nom": "edl_photos_etat_des_lieux_id_fkey",
+    "definition": "FOREIGN KEY (etat_des_lieux_id) REFERENCES etats_des_lieux(id) ON DELETE CASCADE"
+  },
+  {
+    "table_name": "edl_photos",
+    "type_element": "CONSTRAINT",
+    "nom": "edl_photos_organization_id_fkey",
+    "definition": "FOREIGN KEY (organization_id) REFERENCES organizations(id) ON DELETE CASCADE"
+  },
+  {
+    "table_name": "edl_photos",
+    "type_element": "CONSTRAINT",
+    "nom": "edl_photos_pkey",
+    "definition": "PRIMARY KEY (id)"
+  },
+  {
+    "table_name": "edl_photos",
+    "type_element": "CONSTRAINT",
+    "nom": "edl_photos_zone_id_fkey",
+    "definition": "FOREIGN KEY (zone_id) REFERENCES edl_zones(id) ON DELETE SET NULL"
+  },
+  {
+    "table_name": "edl_photos",
+    "type_element": "POLICY",
+    "nom": "Membre creation",
+    "definition": "INSERT roles={authenticated} using= check=is_organization_member(organization_id)"
+  },
+  {
+    "table_name": "edl_photos",
+    "type_element": "POLICY",
+    "nom": "Membre lecture",
+    "definition": "SELECT roles={authenticated} using=is_organization_member(organization_id) check="
+  },
+  {
+    "table_name": "edl_photos",
+    "type_element": "POLICY",
+    "nom": "Membre modification",
+    "definition": "UPDATE roles={authenticated} using=is_organization_member(organization_id) check=is_organization_member(organization_id)"
+  },
+  {
+    "table_name": "edl_photos",
+    "type_element": "POLICY",
+    "nom": "Membre suppression",
+    "definition": "DELETE roles={authenticated} using=is_organization_member(organization_id) check="
+  },
+  {
+    "table_name": "etats_des_lieux",
+    "type_element": "COLUMN",
+    "nom": "accord_voyageur",
+    "definition": "boolean"
+  },
+  {
+    "table_name": "etats_des_lieux",
+    "type_element": "COLUMN",
+    "nom": "created_at",
+    "definition": "timestamp with time zone NOT NULL DEFAULT now()"
+  },
+  {
+    "table_name": "etats_des_lieux",
+    "type_element": "COLUMN",
+    "nom": "date_debut",
+    "definition": "timestamp with time zone"
+  },
+  {
+    "table_name": "etats_des_lieux",
+    "type_element": "COLUMN",
+    "nom": "date_fin",
+    "definition": "timestamp with time zone"
+  },
+  {
+    "table_name": "etats_des_lieux",
+    "type_element": "COLUMN",
+    "nom": "date_prevue",
+    "definition": "timestamp with time zone"
+  },
+  {
+    "table_name": "etats_des_lieux",
+    "type_element": "COLUMN",
+    "nom": "date_signature_operateur",
+    "definition": "timestamp with time zone"
+  },
+  {
+    "table_name": "etats_des_lieux",
+    "type_element": "COLUMN",
+    "nom": "date_signature_voyageur",
+    "definition": "timestamp with time zone"
+  },
+  {
+    "table_name": "etats_des_lieux",
+    "type_element": "COLUMN",
+    "nom": "etat_general",
+    "definition": "text"
+  },
+  {
+    "table_name": "etats_des_lieux",
+    "type_element": "COLUMN",
+    "nom": "id",
+    "definition": "uuid NOT NULL DEFAULT gen_random_uuid()"
+  },
+  {
+    "table_name": "etats_des_lieux",
+    "type_element": "COLUMN",
+    "nom": "logement_id",
+    "definition": "uuid NOT NULL"
+  },
+  {
+    "table_name": "etats_des_lieux",
+    "type_element": "COLUMN",
+    "nom": "logement_snapshot",
+    "definition": "jsonb"
+  },
+  {
+    "table_name": "etats_des_lieux",
+    "type_element": "COLUMN",
+    "nom": "mission_id",
+    "definition": "uuid"
+  },
+  {
+    "table_name": "etats_des_lieux",
+    "type_element": "COLUMN",
+    "nom": "nom_signataire_operateur",
+    "definition": "text"
+  },
+  {
+    "table_name": "etats_des_lieux",
+    "type_element": "COLUMN",
+    "nom": "nom_signataire_voyageur",
+    "definition": "text"
+  },
+  {
+    "table_name": "etats_des_lieux",
+    "type_element": "COLUMN",
+    "nom": "notes_preparation",
+    "definition": "text"
+  },
+  {
+    "table_name": "etats_des_lieux",
+    "type_element": "COLUMN",
+    "nom": "observations_generales",
+    "definition": "text"
+  },
+  {
+    "table_name": "etats_des_lieux",
+    "type_element": "COLUMN",
+    "nom": "observations_voyageur",
+    "definition": "text"
+  },
+  {
+    "table_name": "etats_des_lieux",
+    "type_element": "COLUMN",
+    "nom": "operateur_user_id",
+    "definition": "uuid"
+  },
+  {
+    "table_name": "etats_des_lieux",
+    "type_element": "COLUMN",
+    "nom": "organization_id",
+    "definition": "uuid NOT NULL"
+  },
+  {
+    "table_name": "etats_des_lieux",
+    "type_element": "COLUMN",
+    "nom": "pdf_generated_at",
+    "definition": "timestamp with time zone"
+  },
+  {
+    "table_name": "etats_des_lieux",
+    "type_element": "COLUMN",
+    "nom": "pdf_storage_path",
+    "definition": "text"
+  },
+  {
+    "table_name": "etats_des_lieux",
+    "type_element": "COLUMN",
+    "nom": "proprete",
+    "definition": "text"
+  },
+  {
+    "table_name": "etats_des_lieux",
+    "type_element": "COLUMN",
+    "nom": "proprietaire_snapshot",
+    "definition": "jsonb"
+  },
+  {
+    "table_name": "etats_des_lieux",
+    "type_element": "COLUMN",
+    "nom": "signature_operateur_path",
+    "definition": "text"
+  },
+  {
+    "table_name": "etats_des_lieux",
+    "type_element": "COLUMN",
+    "nom": "signature_voyageur_path",
+    "definition": "text"
+  },
+  {
+    "table_name": "etats_des_lieux",
+    "type_element": "COLUMN",
+    "nom": "statut",
+    "definition": "text NOT NULL DEFAULT 'a_preparer'::text"
+  },
+  {
+    "table_name": "etats_des_lieux",
+    "type_element": "COLUMN",
+    "nom": "type_edl",
+    "definition": "text NOT NULL"
+  },
+  {
+    "table_name": "etats_des_lieux",
+    "type_element": "COLUMN",
+    "nom": "updated_at",
+    "definition": "timestamp with time zone NOT NULL DEFAULT now()"
+  },
+  {
+    "table_name": "etats_des_lieux",
+    "type_element": "COLUMN",
+    "nom": "version",
+    "definition": "integer NOT NULL DEFAULT 1"
+  },
+  {
+    "table_name": "etats_des_lieux",
+    "type_element": "COLUMN",
+    "nom": "voyageur_id",
+    "definition": "uuid"
+  },
+  {
+    "table_name": "etats_des_lieux",
+    "type_element": "COLUMN",
+    "nom": "voyageur_snapshot",
+    "definition": "jsonb"
+  },
+  {
+    "table_name": "etats_des_lieux",
+    "type_element": "CONSTRAINT",
+    "nom": "etats_des_lieux_logement_id_fkey",
+    "definition": "FOREIGN KEY (logement_id) REFERENCES logements(id) ON DELETE RESTRICT"
+  },
+  {
+    "table_name": "etats_des_lieux",
+    "type_element": "CONSTRAINT",
+    "nom": "etats_des_lieux_mission_id_fkey",
+    "definition": "FOREIGN KEY (mission_id) REFERENCES missions(id) ON DELETE SET NULL"
+  },
+  {
+    "table_name": "etats_des_lieux",
+    "type_element": "CONSTRAINT",
+    "nom": "etats_des_lieux_operateur_user_id_fkey",
+    "definition": "FOREIGN KEY (operateur_user_id) REFERENCES auth.users(id) ON DELETE SET NULL"
+  },
+  {
+    "table_name": "etats_des_lieux",
+    "type_element": "CONSTRAINT",
+    "nom": "etats_des_lieux_organization_id_fkey",
+    "definition": "FOREIGN KEY (organization_id) REFERENCES organizations(id) ON DELETE CASCADE"
+  },
+  {
+    "table_name": "etats_des_lieux",
+    "type_element": "CONSTRAINT",
+    "nom": "etats_des_lieux_pkey",
+    "definition": "PRIMARY KEY (id)"
+  },
+  {
+    "table_name": "etats_des_lieux",
+    "type_element": "CONSTRAINT",
+    "nom": "etats_des_lieux_statut_check",
+    "definition": "CHECK ((statut = ANY (ARRAY['a_preparer'::text, 'en_cours'::text, 'termine'::text, 'signe'::text])))"
+  },
+  {
+    "table_name": "etats_des_lieux",
+    "type_element": "CONSTRAINT",
+    "nom": "etats_des_lieux_type_edl_check",
+    "definition": "CHECK ((type_edl = ANY (ARRAY['entree'::text, 'sortie'::text])))"
+  },
+  {
+    "table_name": "etats_des_lieux",
+    "type_element": "CONSTRAINT",
+    "nom": "etats_des_lieux_voyageur_id_fkey",
+    "definition": "FOREIGN KEY (voyageur_id) REFERENCES voyageurs(id) ON DELETE SET NULL"
+  },
+  {
+    "table_name": "etats_des_lieux",
+    "type_element": "POLICY",
+    "nom": "Membre creation",
+    "definition": "INSERT roles={authenticated} using= check=is_organization_member(organization_id)"
+  },
+  {
+    "table_name": "etats_des_lieux",
+    "type_element": "POLICY",
+    "nom": "Membre lecture",
+    "definition": "SELECT roles={authenticated} using=is_organization_member(organization_id) check="
+  },
+  {
+    "table_name": "etats_des_lieux",
+    "type_element": "POLICY",
+    "nom": "Membre modification",
+    "definition": "UPDATE roles={authenticated} using=is_organization_member(organization_id) check=is_organization_member(organization_id)"
+  },
+  {
+    "table_name": "etats_des_lieux",
+    "type_element": "POLICY",
+    "nom": "Membre suppression",
+    "definition": "DELETE roles={authenticated} using=is_organization_member(organization_id) check="
+  },
+  {
+    "table_name": "facture_lignes",
+    "type_element": "COLUMN",
+    "nom": "created_at",
+    "definition": "timestamp with time zone NOT NULL DEFAULT now()"
+  },
+  {
+    "table_name": "facture_lignes",
+    "type_element": "COLUMN",
+    "nom": "designation",
+    "definition": "text NOT NULL"
+  },
+  {
+    "table_name": "facture_lignes",
+    "type_element": "COLUMN",
+    "nom": "facture_id",
+    "definition": "uuid NOT NULL"
+  },
+  {
+    "table_name": "facture_lignes",
+    "type_element": "COLUMN",
+    "nom": "id",
+    "definition": "uuid NOT NULL DEFAULT gen_random_uuid()"
+  },
+  {
+    "table_name": "facture_lignes",
+    "type_element": "COLUMN",
+    "nom": "ordre",
+    "definition": "integer NOT NULL DEFAULT 0"
+  },
+  {
+    "table_name": "facture_lignes",
+    "type_element": "COLUMN",
+    "nom": "organization_id",
+    "definition": "uuid NOT NULL"
+  },
+  {
+    "table_name": "facture_lignes",
+    "type_element": "COLUMN",
+    "nom": "prix_unitaire_ht",
+    "definition": "numeric NOT NULL DEFAULT 0"
+  },
+  {
+    "table_name": "facture_lignes",
+    "type_element": "COLUMN",
+    "nom": "quantite",
+    "definition": "numeric NOT NULL DEFAULT 1"
+  },
+  {
+    "table_name": "facture_lignes",
+    "type_element": "COLUMN",
+    "nom": "taux_tva",
+    "definition": "numeric NOT NULL DEFAULT 0"
+  },
+  {
+    "table_name": "facture_lignes",
+    "type_element": "CONSTRAINT",
+    "nom": "facture_lignes_facture_id_fkey",
+    "definition": "FOREIGN KEY (facture_id) REFERENCES factures(id) ON DELETE CASCADE"
+  },
+  {
+    "table_name": "facture_lignes",
+    "type_element": "CONSTRAINT",
+    "nom": "facture_lignes_organization_id_fkey",
+    "definition": "FOREIGN KEY (organization_id) REFERENCES organizations(id) ON DELETE CASCADE"
+  },
+  {
+    "table_name": "facture_lignes",
+    "type_element": "CONSTRAINT",
+    "nom": "facture_lignes_pkey",
+    "definition": "PRIMARY KEY (id)"
+  },
+  {
+    "table_name": "facture_lignes",
+    "type_element": "POLICY",
+    "nom": "Membre creation",
+    "definition": "INSERT roles={authenticated} using= check=is_organization_member(organization_id)"
+  },
+  {
+    "table_name": "facture_lignes",
+    "type_element": "POLICY",
+    "nom": "Membre lecture",
+    "definition": "SELECT roles={authenticated} using=is_organization_member(organization_id) check="
+  },
+  {
+    "table_name": "facture_lignes",
+    "type_element": "POLICY",
+    "nom": "Membre modification",
+    "definition": "UPDATE roles={authenticated} using=is_organization_member(organization_id) check=is_organization_member(organization_id)"
+  },
+  {
+    "table_name": "facture_lignes",
+    "type_element": "POLICY",
+    "nom": "Membre suppression",
+    "definition": "DELETE roles={authenticated} using=is_organization_member(organization_id) check="
+  },
+  {
+    "table_name": "factures",
+    "type_element": "COLUMN",
+    "nom": "created_at",
+    "definition": "timestamp with time zone NOT NULL DEFAULT now()"
+  },
+  {
+    "table_name": "factures",
+    "type_element": "COLUMN",
+    "nom": "date_echeance",
+    "definition": "date"
+  },
+  {
+    "table_name": "factures",
+    "type_element": "COLUMN",
+    "nom": "date_facture",
+    "definition": "date NOT NULL DEFAULT CURRENT_DATE"
+  },
+  {
+    "table_name": "factures",
+    "type_element": "COLUMN",
+    "nom": "id",
+    "definition": "uuid NOT NULL DEFAULT gen_random_uuid()"
+  },
+  {
+    "table_name": "factures",
+    "type_element": "COLUMN",
+    "nom": "logement_id",
+    "definition": "uuid"
+  },
+  {
+    "table_name": "factures",
+    "type_element": "COLUMN",
+    "nom": "mission_id",
+    "definition": "uuid"
+  },
+  {
+    "table_name": "factures",
+    "type_element": "COLUMN",
+    "nom": "montant_paye",
+    "definition": "numeric NOT NULL DEFAULT 0"
+  },
+  {
+    "table_name": "factures",
+    "type_element": "COLUMN",
+    "nom": "numero",
+    "definition": "text NOT NULL"
+  },
+  {
+    "table_name": "factures",
+    "type_element": "COLUMN",
+    "nom": "observations",
+    "definition": "text"
+  },
+  {
+    "table_name": "factures",
+    "type_element": "COLUMN",
+    "nom": "organization_id",
+    "definition": "uuid NOT NULL"
+  },
+  {
+    "table_name": "factures",
+    "type_element": "COLUMN",
+    "nom": "pdf_storage_path",
+    "definition": "text"
+  },
+  {
+    "table_name": "factures",
+    "type_element": "COLUMN",
+    "nom": "proprietaire_id",
+    "definition": "uuid"
+  },
+  {
+    "table_name": "factures",
+    "type_element": "COLUMN",
+    "nom": "remise",
+    "definition": "numeric NOT NULL DEFAULT 0"
+  },
+  {
+    "table_name": "factures",
+    "type_element": "COLUMN",
+    "nom": "statut",
+    "definition": "text NOT NULL DEFAULT 'brouillon'::text"
+  },
+  {
+    "table_name": "factures",
+    "type_element": "COLUMN",
+    "nom": "total_ht",
+    "definition": "numeric NOT NULL DEFAULT 0"
+  },
+  {
+    "table_name": "factures",
+    "type_element": "COLUMN",
+    "nom": "total_ttc",
+    "definition": "numeric NOT NULL DEFAULT 0"
+  },
+  {
+    "table_name": "factures",
+    "type_element": "COLUMN",
+    "nom": "total_tva",
+    "definition": "numeric NOT NULL DEFAULT 0"
+  },
+  {
+    "table_name": "factures",
+    "type_element": "COLUMN",
+    "nom": "type_document",
+    "definition": "text NOT NULL DEFAULT 'Facture'::text"
+  },
+  {
+    "table_name": "factures",
+    "type_element": "COLUMN",
+    "nom": "updated_at",
+    "definition": "timestamp with time zone NOT NULL DEFAULT now()"
+  },
+  {
+    "table_name": "factures",
+    "type_element": "COLUMN",
+    "nom": "voyageur_id",
+    "definition": "uuid"
+  },
+  {
+    "table_name": "factures",
+    "type_element": "CONSTRAINT",
+    "nom": "factures_logement_id_fkey",
+    "definition": "FOREIGN KEY (logement_id) REFERENCES logements(id) ON DELETE SET NULL"
+  },
+  {
+    "table_name": "factures",
+    "type_element": "CONSTRAINT",
+    "nom": "factures_mission_id_fkey",
+    "definition": "FOREIGN KEY (mission_id) REFERENCES missions(id) ON DELETE SET NULL"
+  },
+  {
+    "table_name": "factures",
+    "type_element": "CONSTRAINT",
+    "nom": "factures_organization_id_fkey",
+    "definition": "FOREIGN KEY (organization_id) REFERENCES organizations(id) ON DELETE CASCADE"
+  },
+  {
+    "table_name": "factures",
+    "type_element": "CONSTRAINT",
+    "nom": "factures_organization_id_numero_key",
+    "definition": "UNIQUE (organization_id, numero)"
+  },
+  {
+    "table_name": "factures",
+    "type_element": "CONSTRAINT",
+    "nom": "factures_pkey",
+    "definition": "PRIMARY KEY (id)"
+  },
+  {
+    "table_name": "factures",
+    "type_element": "CONSTRAINT",
+    "nom": "factures_proprietaire_id_fkey",
+    "definition": "FOREIGN KEY (proprietaire_id) REFERENCES proprietaires(id) ON DELETE SET NULL"
+  },
+  {
+    "table_name": "factures",
+    "type_element": "CONSTRAINT",
+    "nom": "factures_statut_check",
+    "definition": "CHECK ((statut = ANY (ARRAY['brouillon'::text, 'emise'::text, 'payee'::text, 'partiellement_payee'::text, 'annulee'::text])))"
+  },
+  {
+    "table_name": "factures",
+    "type_element": "CONSTRAINT",
+    "nom": "factures_type_document_check",
+    "definition": "CHECK ((type_document = ANY (ARRAY['Devis'::text, 'Facture'::text, 'Acompte'::text, 'Avoir'::text])))"
+  },
+  {
+    "table_name": "factures",
+    "type_element": "CONSTRAINT",
+    "nom": "factures_voyageur_id_fkey",
+    "definition": "FOREIGN KEY (voyageur_id) REFERENCES voyageurs(id) ON DELETE SET NULL"
+  },
+  {
+    "table_name": "factures",
+    "type_element": "POLICY",
+    "nom": "Membre creation",
+    "definition": "INSERT roles={authenticated} using= check=is_organization_member(organization_id)"
+  },
+  {
+    "table_name": "factures",
+    "type_element": "POLICY",
+    "nom": "Membre lecture",
+    "definition": "SELECT roles={authenticated} using=is_organization_member(organization_id) check="
+  },
+  {
+    "table_name": "factures",
+    "type_element": "POLICY",
+    "nom": "Membre modification",
+    "definition": "UPDATE roles={authenticated} using=is_organization_member(organization_id) check=is_organization_member(organization_id)"
+  },
+  {
+    "table_name": "factures",
+    "type_element": "POLICY",
+    "nom": "Membre suppression",
+    "definition": "DELETE roles={authenticated} using=is_organization_member(organization_id) check="
+  },
+  {
+    "table_name": "logements",
+    "type_element": "COLUMN",
+    "nom": "actif",
+    "definition": "boolean NOT NULL DEFAULT true"
+  },
+  {
+    "table_name": "logements",
+    "type_element": "COLUMN",
+    "nom": "adresse",
+    "definition": "text NOT NULL"
+  },
+  {
+    "table_name": "logements",
+    "type_element": "COLUMN",
+    "nom": "boite_cles",
+    "definition": "text"
+  },
+  {
+    "table_name": "logements",
+    "type_element": "COLUMN",
+    "nom": "capacite",
+    "definition": "smallint"
+  },
+  {
+    "table_name": "logements",
+    "type_element": "COLUMN",
+    "nom": "code_boite_cles",
+    "definition": "text"
+  },
+  {
+    "table_name": "logements",
+    "type_element": "COLUMN",
+    "nom": "code_postal",
+    "definition": "text"
+  },
+  {
+    "table_name": "logements",
+    "type_element": "COLUMN",
+    "nom": "created_at",
+    "definition": "timestamp with time zone NOT NULL DEFAULT now()"
+  },
+  {
+    "table_name": "logements",
+    "type_element": "COLUMN",
+    "nom": "etage",
+    "definition": "text"
+  },
+  {
+    "table_name": "logements",
+    "type_element": "COLUMN",
+    "nom": "id",
+    "definition": "uuid NOT NULL DEFAULT gen_random_uuid()"
+  },
+  {
+    "table_name": "logements",
+    "type_element": "COLUMN",
+    "nom": "informations_acces",
+    "definition": "text"
+  },
+  {
+    "table_name": "logements",
+    "type_element": "COLUMN",
+    "nom": "nom",
+    "definition": "text NOT NULL"
+  },
+  {
+    "table_name": "logements",
+    "type_element": "COLUMN",
+    "nom": "nombre_chambres",
+    "definition": "smallint"
+  },
+  {
+    "table_name": "logements",
+    "type_element": "COLUMN",
+    "nom": "nombre_pieces",
+    "definition": "smallint"
+  },
+  {
+    "table_name": "logements",
+    "type_element": "COLUMN",
+    "nom": "observations",
+    "definition": "text"
+  },
+  {
+    "table_name": "logements",
+    "type_element": "COLUMN",
+    "nom": "organization_id",
+    "definition": "uuid NOT NULL"
+  },
+  {
+    "table_name": "logements",
+    "type_element": "COLUMN",
+    "nom": "proprietaire_id",
+    "definition": "uuid"
+  },
+  {
+    "table_name": "logements",
+    "type_element": "COLUMN",
+    "nom": "superficie_m2",
+    "definition": "numeric"
+  },
+  {
+    "table_name": "logements",
+    "type_element": "COLUMN",
+    "nom": "type_logement",
+    "definition": "text"
+  },
+  {
+    "table_name": "logements",
+    "type_element": "COLUMN",
+    "nom": "updated_at",
+    "definition": "timestamp with time zone NOT NULL DEFAULT now()"
+  },
+  {
+    "table_name": "logements",
+    "type_element": "COLUMN",
+    "nom": "ville",
+    "definition": "text"
+  },
+  {
+    "table_name": "logements",
+    "type_element": "COLUMN",
+    "nom": "wifi_mot_de_passe",
+    "definition": "text"
+  },
+  {
+    "table_name": "logements",
+    "type_element": "COLUMN",
+    "nom": "wifi_ssid",
+    "definition": "text"
+  },
+  {
+    "table_name": "logements",
+    "type_element": "CONSTRAINT",
+    "nom": "logements_capacite_check",
+    "definition": "CHECK (((capacite IS NULL) OR (capacite >= 0)))"
+  },
+  {
+    "table_name": "logements",
+    "type_element": "CONSTRAINT",
+    "nom": "logements_nombre_chambres_check",
+    "definition": "CHECK (((nombre_chambres IS NULL) OR (nombre_chambres >= 0)))"
+  },
+  {
+    "table_name": "logements",
+    "type_element": "CONSTRAINT",
+    "nom": "logements_nombre_pieces_check",
+    "definition": "CHECK (((nombre_pieces IS NULL) OR (nombre_pieces >= 0)))"
+  },
+  {
+    "table_name": "logements",
+    "type_element": "CONSTRAINT",
+    "nom": "logements_organization_id_fkey",
+    "definition": "FOREIGN KEY (organization_id) REFERENCES organizations(id) ON DELETE CASCADE"
+  },
+  {
+    "table_name": "logements",
+    "type_element": "CONSTRAINT",
+    "nom": "logements_pkey",
+    "definition": "PRIMARY KEY (id)"
+  },
+  {
+    "table_name": "logements",
+    "type_element": "CONSTRAINT",
+    "nom": "logements_proprietaire_id_fkey",
+    "definition": "FOREIGN KEY (proprietaire_id) REFERENCES proprietaires(id) ON DELETE SET NULL"
+  },
+  {
+    "table_name": "logements",
+    "type_element": "POLICY",
+    "nom": "Membre creation",
+    "definition": "INSERT roles={authenticated} using= check=is_organization_member(organization_id)"
+  },
+  {
+    "table_name": "logements",
+    "type_element": "POLICY",
+    "nom": "Membre lecture",
+    "definition": "SELECT roles={authenticated} using=is_organization_member(organization_id) check="
+  },
+  {
+    "table_name": "logements",
+    "type_element": "POLICY",
+    "nom": "Membre modification",
+    "definition": "UPDATE roles={authenticated} using=is_organization_member(organization_id) check=is_organization_member(organization_id)"
+  },
+  {
+    "table_name": "logements",
+    "type_element": "POLICY",
+    "nom": "Membre suppression",
+    "definition": "DELETE roles={authenticated} using=is_organization_member(organization_id) check="
+  },
+  {
+    "table_name": "menages",
+    "type_element": "COLUMN",
+    "nom": "checklist",
+    "definition": "jsonb NOT NULL DEFAULT '[]'::jsonb"
+  },
+  {
+    "table_name": "menages",
+    "type_element": "COLUMN",
+    "nom": "controle_effectue",
+    "definition": "boolean NOT NULL DEFAULT false"
+  },
+  {
+    "table_name": "menages",
+    "type_element": "COLUMN",
+    "nom": "created_at",
+    "definition": "timestamp with time zone NOT NULL DEFAULT now()"
+  },
+  {
+    "table_name": "menages",
+    "type_element": "COLUMN",
+    "nom": "date_prevue",
+    "definition": "timestamp with time zone"
+  },
+  {
+    "table_name": "menages",
+    "type_element": "COLUMN",
+    "nom": "date_realisation",
+    "definition": "timestamp with time zone"
+  },
+  {
+    "table_name": "menages",
+    "type_element": "COLUMN",
+    "nom": "duree_heures",
+    "definition": "numeric NOT NULL DEFAULT 2"
+  },
+  {
+    "table_name": "menages",
+    "type_element": "COLUMN",
+    "nom": "id",
+    "definition": "uuid NOT NULL DEFAULT gen_random_uuid()"
+  },
+  {
+    "table_name": "menages",
+    "type_element": "COLUMN",
+    "nom": "linge",
+    "definition": "boolean NOT NULL DEFAULT false"
+  },
+  {
+    "table_name": "menages",
+    "type_element": "COLUMN",
+    "nom": "logement_id",
+    "definition": "uuid NOT NULL"
+  },
+  {
+    "table_name": "menages",
+    "type_element": "COLUMN",
+    "nom": "mission_id",
+    "definition": "uuid"
+  },
+  {
+    "table_name": "menages",
+    "type_element": "COLUMN",
+    "nom": "montant",
+    "definition": "numeric"
+  },
+  {
+    "table_name": "menages",
+    "type_element": "COLUMN",
+    "nom": "observations",
+    "definition": "text"
+  },
+  {
+    "table_name": "menages",
+    "type_element": "COLUMN",
+    "nom": "organization_id",
+    "definition": "uuid NOT NULL"
+  },
+  {
+    "table_name": "menages",
+    "type_element": "COLUMN",
+    "nom": "prestataire",
+    "definition": "text"
+  },
+  {
+    "table_name": "menages",
+    "type_element": "COLUMN",
+    "nom": "statut",
+    "definition": "text NOT NULL DEFAULT 'a_faire'::text"
+  },
+  {
+    "table_name": "menages",
+    "type_element": "COLUMN",
+    "nom": "type_menage",
+    "definition": "text NOT NULL DEFAULT 'Ménage de sortie'::text"
+  },
+  {
+    "table_name": "menages",
+    "type_element": "COLUMN",
+    "nom": "updated_at",
+    "definition": "timestamp with time zone NOT NULL DEFAULT now()"
+  },
+  {
+    "table_name": "menages",
+    "type_element": "COLUMN",
+    "nom": "voyageur_id",
+    "definition": "uuid"
+  },
+  {
+    "table_name": "menages",
+    "type_element": "CONSTRAINT",
+    "nom": "menages_logement_id_fkey",
+    "definition": "FOREIGN KEY (logement_id) REFERENCES logements(id) ON DELETE CASCADE"
+  },
+  {
+    "table_name": "menages",
+    "type_element": "CONSTRAINT",
+    "nom": "menages_mission_id_fkey",
+    "definition": "FOREIGN KEY (mission_id) REFERENCES missions(id) ON DELETE SET NULL"
+  },
+  {
+    "table_name": "menages",
+    "type_element": "CONSTRAINT",
+    "nom": "menages_organization_id_fkey",
+    "definition": "FOREIGN KEY (organization_id) REFERENCES organizations(id) ON DELETE CASCADE"
+  },
+  {
+    "table_name": "menages",
+    "type_element": "CONSTRAINT",
+    "nom": "menages_pkey",
+    "definition": "PRIMARY KEY (id)"
+  },
+  {
+    "table_name": "menages",
+    "type_element": "CONSTRAINT",
+    "nom": "menages_statut_check",
+    "definition": "CHECK ((statut = ANY (ARRAY['a_faire'::text, 'en_cours'::text, 'termine'::text, 'annule'::text])))"
+  },
+  {
+    "table_name": "menages",
+    "type_element": "CONSTRAINT",
+    "nom": "menages_type_menage_check",
+    "definition": "CHECK ((type_menage = ANY (ARRAY['Ménage d’entrée'::text, 'Ménage de sortie'::text, 'Ménage complet'::text, 'Entretien'::text, 'Grand nettoyage'::text])))"
+  },
+  {
+    "table_name": "menages",
+    "type_element": "CONSTRAINT",
+    "nom": "menages_voyageur_id_fkey",
+    "definition": "FOREIGN KEY (voyageur_id) REFERENCES voyageurs(id) ON DELETE SET NULL"
+  },
+  {
+    "table_name": "menages",
+    "type_element": "POLICY",
+    "nom": "Membre creation",
+    "definition": "INSERT roles={authenticated} using= check=is_organization_member(organization_id)"
+  },
+  {
+    "table_name": "menages",
+    "type_element": "POLICY",
+    "nom": "Membre lecture",
+    "definition": "SELECT roles={authenticated} using=is_organization_member(organization_id) check="
+  },
+  {
+    "table_name": "menages",
+    "type_element": "POLICY",
+    "nom": "Membre modification",
+    "definition": "UPDATE roles={authenticated} using=is_organization_member(organization_id) check=is_organization_member(organization_id)"
+  },
+  {
+    "table_name": "menages",
+    "type_element": "POLICY",
+    "nom": "Membre suppression",
+    "definition": "DELETE roles={authenticated} using=is_organization_member(organization_id) check="
+  },
+  {
+    "table_name": "missions",
+    "type_element": "COLUMN",
+    "nom": "assigne_a",
+    "definition": "text"
+  },
+  {
+    "table_name": "missions",
+    "type_element": "COLUMN",
+    "nom": "created_at",
+    "definition": "timestamp with time zone NOT NULL DEFAULT now()"
+  },
+  {
+    "table_name": "missions",
+    "type_element": "COLUMN",
+    "nom": "date_debut",
+    "definition": "timestamp with time zone"
+  },
+  {
+    "table_name": "missions",
+    "type_element": "COLUMN",
+    "nom": "date_fin",
+    "definition": "timestamp with time zone"
+  },
+  {
+    "table_name": "missions",
+    "type_element": "COLUMN",
+    "nom": "date_mission",
+    "definition": "date"
+  },
+  {
+    "table_name": "missions",
+    "type_element": "COLUMN",
+    "nom": "description",
+    "definition": "text"
+  },
+  {
+    "table_name": "missions",
+    "type_element": "COLUMN",
+    "nom": "heure_mission",
+    "definition": "time without time zone"
+  },
+  {
+    "table_name": "missions",
+    "type_element": "COLUMN",
+    "nom": "id",
+    "definition": "uuid NOT NULL DEFAULT gen_random_uuid()"
+  },
+  {
+    "table_name": "missions",
+    "type_element": "COLUMN",
+    "nom": "logement_id",
+    "definition": "uuid"
+  },
+  {
+    "table_name": "missions",
+    "type_element": "COLUMN",
+    "nom": "observations",
+    "definition": "text"
+  },
+  {
+    "table_name": "missions",
+    "type_element": "COLUMN",
+    "nom": "organization_id",
+    "definition": "uuid NOT NULL"
+  },
+  {
+    "table_name": "missions",
+    "type_element": "COLUMN",
+    "nom": "priorite",
+    "definition": "text NOT NULL DEFAULT 'Normale'::text"
+  },
+  {
+    "table_name": "missions",
+    "type_element": "COLUMN",
+    "nom": "proprietaire_id",
+    "definition": "uuid"
+  },
+  {
+    "table_name": "missions",
+    "type_element": "COLUMN",
+    "nom": "statut",
+    "definition": "text NOT NULL DEFAULT 'À faire'::text"
+  },
+  {
+    "table_name": "missions",
+    "type_element": "COLUMN",
+    "nom": "titre",
+    "definition": "text"
+  },
+  {
+    "table_name": "missions",
+    "type_element": "COLUMN",
+    "nom": "type_mission",
+    "definition": "text NOT NULL DEFAULT 'Arrivée'::text"
+  },
+  {
+    "table_name": "missions",
+    "type_element": "COLUMN",
+    "nom": "updated_at",
+    "definition": "timestamp with time zone NOT NULL DEFAULT now()"
+  },
+  {
+    "table_name": "missions",
+    "type_element": "COLUMN",
+    "nom": "voyageur_id",
+    "definition": "uuid"
+  },
+  {
+    "table_name": "missions",
+    "type_element": "CONSTRAINT",
+    "nom": "missions_logement_id_fkey",
+    "definition": "FOREIGN KEY (logement_id) REFERENCES logements(id) ON DELETE SET NULL"
+  },
+  {
+    "table_name": "missions",
+    "type_element": "CONSTRAINT",
+    "nom": "missions_organization_id_fkey",
+    "definition": "FOREIGN KEY (organization_id) REFERENCES organizations(id) ON DELETE CASCADE"
+  },
+  {
+    "table_name": "missions",
+    "type_element": "CONSTRAINT",
+    "nom": "missions_pkey",
+    "definition": "PRIMARY KEY (id)"
+  },
+  {
+    "table_name": "missions",
+    "type_element": "CONSTRAINT",
+    "nom": "missions_priorite_check",
+    "definition": "CHECK ((priorite = ANY (ARRAY['Basse'::text, 'Normale'::text, 'Haute'::text, 'Urgente'::text])))"
+  },
+  {
+    "table_name": "missions",
+    "type_element": "CONSTRAINT",
+    "nom": "missions_proprietaire_id_fkey",
+    "definition": "FOREIGN KEY (proprietaire_id) REFERENCES proprietaires(id) ON DELETE SET NULL"
+  },
+  {
+    "table_name": "missions",
+    "type_element": "CONSTRAINT",
+    "nom": "missions_statut_check",
+    "definition": "CHECK ((statut = ANY (ARRAY['À faire'::text, 'En cours'::text, 'Terminée'::text, 'Annulée'::text])))"
+  },
+  {
+    "table_name": "missions",
+    "type_element": "CONSTRAINT",
+    "nom": "missions_type_mission_check",
+    "definition": "CHECK ((type_mission = ANY (ARRAY['Arrivée'::text, 'Départ'::text, 'État des lieux entrée'::text, 'État des lieux sortie'::text, 'Remise des clés'::text, 'Récupération des clés'::text, 'Ménage'::text, 'Pressing'::text, 'Maintenance'::text, 'Intervention'::text])))"
+  },
+  {
+    "table_name": "missions",
+    "type_element": "CONSTRAINT",
+    "nom": "missions_voyageur_id_fkey",
+    "definition": "FOREIGN KEY (voyageur_id) REFERENCES voyageurs(id) ON DELETE SET NULL"
+  },
+  {
+    "table_name": "missions",
+    "type_element": "POLICY",
+    "nom": "Membre creation",
+    "definition": "INSERT roles={authenticated} using= check=is_organization_member(organization_id)"
+  },
+  {
+    "table_name": "missions",
+    "type_element": "POLICY",
+    "nom": "Membre lecture",
+    "definition": "SELECT roles={authenticated} using=is_organization_member(organization_id) check="
+  },
+  {
+    "table_name": "missions",
+    "type_element": "POLICY",
+    "nom": "Membre modification",
+    "definition": "UPDATE roles={authenticated} using=is_organization_member(organization_id) check=is_organization_member(organization_id)"
+  },
+  {
+    "table_name": "missions",
+    "type_element": "POLICY",
+    "nom": "Membre suppression",
+    "definition": "DELETE roles={authenticated} using=is_organization_member(organization_id) check="
+  },
+  {
+    "table_name": "organization_members",
+    "type_element": "COLUMN",
+    "nom": "created_at",
+    "definition": "timestamp with time zone NOT NULL DEFAULT now()"
+  },
+  {
+    "table_name": "organization_members",
+    "type_element": "COLUMN",
+    "nom": "organization_id",
+    "definition": "uuid NOT NULL"
+  },
+  {
+    "table_name": "organization_members",
+    "type_element": "COLUMN",
+    "nom": "role",
+    "definition": "text NOT NULL DEFAULT 'membre'::text"
+  },
+  {
+    "table_name": "organization_members",
+    "type_element": "COLUMN",
+    "nom": "user_id",
+    "definition": "uuid NOT NULL"
+  },
+  {
+    "table_name": "organization_members",
+    "type_element": "CONSTRAINT",
+    "nom": "organization_members_organization_id_fkey",
+    "definition": "FOREIGN KEY (organization_id) REFERENCES organizations(id) ON DELETE CASCADE"
+  },
+  {
+    "table_name": "organization_members",
+    "type_element": "CONSTRAINT",
+    "nom": "organization_members_pkey",
+    "definition": "PRIMARY KEY (organization_id, user_id)"
+  },
+  {
+    "table_name": "organization_members",
+    "type_element": "CONSTRAINT",
+    "nom": "organization_members_role_check",
+    "definition": "CHECK ((role = ANY (ARRAY['admin'::text, 'membre'::text])))"
+  },
+  {
+    "table_name": "organization_members",
+    "type_element": "CONSTRAINT",
+    "nom": "organization_members_user_id_fkey",
+    "definition": "FOREIGN KEY (user_id) REFERENCES auth.users(id) ON DELETE CASCADE"
+  },
+  {
+    "table_name": "organization_members",
+    "type_element": "POLICY",
+    "nom": "Ajouter membre organisation",
+    "definition": "INSERT roles={authenticated} using= check=is_organization_admin(organization_id)"
+  },
+  {
+    "table_name": "organization_members",
+    "type_element": "POLICY",
+    "nom": "Modifier membre organisation",
+    "definition": "UPDATE roles={authenticated} using=is_organization_admin(organization_id) check=is_organization_admin(organization_id)"
+  },
+  {
+    "table_name": "organization_members",
+    "type_element": "POLICY",
+    "nom": "Supprimer membre organisation",
+    "definition": "DELETE roles={authenticated} using=is_organization_admin(organization_id) check="
+  },
+  {
+    "table_name": "organization_members",
+    "type_element": "POLICY",
+    "nom": "Voir membres organisation",
+    "definition": "SELECT roles={authenticated} using=is_organization_member(organization_id) check="
+  },
+  {
+    "table_name": "organization_settings",
+    "type_element": "COLUMN",
+    "nom": "adresse",
+    "definition": "text"
+  },
+  {
+    "table_name": "organization_settings",
+    "type_element": "COLUMN",
+    "nom": "code_postal",
+    "definition": "text"
+  },
+  {
+    "table_name": "organization_settings",
+    "type_element": "COLUMN",
+    "nom": "created_at",
+    "definition": "timestamp with time zone NOT NULL DEFAULT now()"
+  },
+  {
+    "table_name": "organization_settings",
+    "type_element": "COLUMN",
+    "nom": "delai_paiement",
+    "definition": "integer NOT NULL DEFAULT 30"
+  },
+  {
+    "table_name": "organization_settings",
+    "type_element": "COLUMN",
+    "nom": "devise",
+    "definition": "text NOT NULL DEFAULT 'EUR'::text"
+  },
+  {
+    "table_name": "organization_settings",
+    "type_element": "COLUMN",
+    "nom": "email",
+    "definition": "text"
+  },
+  {
+    "table_name": "organization_settings",
+    "type_element": "COLUMN",
+    "nom": "email_copie_edl",
+    "definition": "text"
+  },
+  {
+    "table_name": "organization_settings",
+    "type_element": "COLUMN",
+    "nom": "logo_path",
+    "definition": "text"
+  },
+  {
+    "table_name": "organization_settings",
+    "type_element": "COLUMN",
+    "nom": "nom_entreprise",
+    "definition": "text NOT NULL DEFAULT 'Cap Serein'::text"
+  },
+  {
+    "table_name": "organization_settings",
+    "type_element": "COLUMN",
+    "nom": "notes_facture",
+    "definition": "text"
+  },
+  {
+    "table_name": "organization_settings",
+    "type_element": "COLUMN",
+    "nom": "organization_id",
+    "definition": "uuid NOT NULL"
+  },
+  {
+    "table_name": "organization_settings",
+    "type_element": "COLUMN",
+    "nom": "prefixe_facture",
+    "definition": "text NOT NULL DEFAULT 'FAC'::text"
+  },
+  {
+    "table_name": "organization_settings",
+    "type_element": "COLUMN",
+    "nom": "responsable",
+    "definition": "text"
+  },
+  {
+    "table_name": "organization_settings",
+    "type_element": "COLUMN",
+    "nom": "siret",
+    "definition": "text"
+  },
+  {
+    "table_name": "organization_settings",
+    "type_element": "COLUMN",
+    "nom": "taux_tva",
+    "definition": "numeric NOT NULL DEFAULT 0"
+  },
+  {
+    "table_name": "organization_settings",
+    "type_element": "COLUMN",
+    "nom": "telephone",
+    "definition": "text"
+  },
+  {
+    "table_name": "organization_settings",
+    "type_element": "COLUMN",
+    "nom": "updated_at",
+    "definition": "timestamp with time zone NOT NULL DEFAULT now()"
+  },
+  {
+    "table_name": "organization_settings",
+    "type_element": "COLUMN",
+    "nom": "ville",
+    "definition": "text"
+  },
+  {
+    "table_name": "organization_settings",
+    "type_element": "CONSTRAINT",
+    "nom": "organization_settings_organization_id_fkey",
+    "definition": "FOREIGN KEY (organization_id) REFERENCES organizations(id) ON DELETE CASCADE"
+  },
+  {
+    "table_name": "organization_settings",
+    "type_element": "CONSTRAINT",
+    "nom": "organization_settings_pkey",
+    "definition": "PRIMARY KEY (organization_id)"
+  },
+  {
+    "table_name": "organization_settings",
+    "type_element": "POLICY",
+    "nom": "Modifier parametres organisation",
+    "definition": "UPDATE roles={authenticated} using=is_organization_admin(organization_id) check=is_organization_admin(organization_id)"
+  },
+  {
+    "table_name": "organization_settings",
+    "type_element": "POLICY",
+    "nom": "Voir parametres organisation",
+    "definition": "SELECT roles={authenticated} using=is_organization_member(organization_id) check="
+  },
+  {
+    "table_name": "pressings",
+    "type_element": "COLUMN",
+    "nom": "articles",
+    "definition": "jsonb NOT NULL DEFAULT '[]'::jsonb"
+  },
+  {
+    "table_name": "pressings",
+    "type_element": "COLUMN",
+    "nom": "created_at",
+    "definition": "timestamp with time zone NOT NULL DEFAULT now()"
+  },
+  {
+    "table_name": "pressings",
+    "type_element": "COLUMN",
+    "nom": "date_depot",
+    "definition": "timestamp with time zone"
+  },
+  {
+    "table_name": "pressings",
+    "type_element": "COLUMN",
+    "nom": "date_recuperation",
+    "definition": "timestamp with time zone"
+  },
+  {
+    "table_name": "pressings",
+    "type_element": "COLUMN",
+    "nom": "date_recuperation_prevue",
+    "definition": "timestamp with time zone"
+  },
+  {
+    "table_name": "pressings",
+    "type_element": "COLUMN",
+    "nom": "id",
+    "definition": "uuid NOT NULL DEFAULT gen_random_uuid()"
+  },
+  {
+    "table_name": "pressings",
+    "type_element": "COLUMN",
+    "nom": "logement_id",
+    "definition": "uuid"
+  },
+  {
+    "table_name": "pressings",
+    "type_element": "COLUMN",
+    "nom": "mission_id",
+    "definition": "uuid"
+  },
+  {
+    "table_name": "pressings",
+    "type_element": "COLUMN",
+    "nom": "montant",
+    "definition": "numeric"
+  },
+  {
+    "table_name": "pressings",
+    "type_element": "COLUMN",
+    "nom": "nombre_sacs",
+    "definition": "integer NOT NULL DEFAULT 1"
+  },
+  {
+    "table_name": "pressings",
+    "type_element": "COLUMN",
+    "nom": "observations",
+    "definition": "text"
+  },
+  {
+    "table_name": "pressings",
+    "type_element": "COLUMN",
+    "nom": "organization_id",
+    "definition": "uuid NOT NULL"
+  },
+  {
+    "table_name": "pressings",
+    "type_element": "COLUMN",
+    "nom": "paiement_effectue",
+    "definition": "boolean NOT NULL DEFAULT false"
+  },
+  {
+    "table_name": "pressings",
+    "type_element": "COLUMN",
+    "nom": "prestataire",
+    "definition": "text"
+  },
+  {
+    "table_name": "pressings",
+    "type_element": "COLUMN",
+    "nom": "statut",
+    "definition": "text NOT NULL DEFAULT 'a_deposer'::text"
+  },
+  {
+    "table_name": "pressings",
+    "type_element": "COLUMN",
+    "nom": "type_prestation",
+    "definition": "text NOT NULL DEFAULT 'Blanchisserie complète'::text"
+  },
+  {
+    "table_name": "pressings",
+    "type_element": "COLUMN",
+    "nom": "updated_at",
+    "definition": "timestamp with time zone NOT NULL DEFAULT now()"
+  },
+  {
+    "table_name": "pressings",
+    "type_element": "COLUMN",
+    "nom": "voyageur_id",
+    "definition": "uuid"
+  },
+  {
+    "table_name": "pressings",
+    "type_element": "CONSTRAINT",
+    "nom": "pressings_logement_id_fkey",
+    "definition": "FOREIGN KEY (logement_id) REFERENCES logements(id) ON DELETE SET NULL"
+  },
+  {
+    "table_name": "pressings",
+    "type_element": "CONSTRAINT",
+    "nom": "pressings_mission_id_fkey",
+    "definition": "FOREIGN KEY (mission_id) REFERENCES missions(id) ON DELETE SET NULL"
+  },
+  {
+    "table_name": "pressings",
+    "type_element": "CONSTRAINT",
+    "nom": "pressings_organization_id_fkey",
+    "definition": "FOREIGN KEY (organization_id) REFERENCES organizations(id) ON DELETE CASCADE"
+  },
+  {
+    "table_name": "pressings",
+    "type_element": "CONSTRAINT",
+    "nom": "pressings_pkey",
+    "definition": "PRIMARY KEY (id)"
+  },
+  {
+    "table_name": "pressings",
+    "type_element": "CONSTRAINT",
+    "nom": "pressings_statut_check",
+    "definition": "CHECK ((statut = ANY (ARRAY['a_deposer'::text, 'depose'::text, 'pret'::text, 'recupere'::text, 'annule'::text])))"
+  },
+  {
+    "table_name": "pressings",
+    "type_element": "CONSTRAINT",
+    "nom": "pressings_type_prestation_check",
+    "definition": "CHECK ((type_prestation = ANY (ARRAY['Collecte du linge'::text, 'Lavage'::text, 'Repassage'::text, 'Blanchisserie complète'::text, 'Livraison du linge'::text, 'Autre'::text])))"
+  },
+  {
+    "table_name": "pressings",
+    "type_element": "CONSTRAINT",
+    "nom": "pressings_voyageur_id_fkey",
+    "definition": "FOREIGN KEY (voyageur_id) REFERENCES voyageurs(id) ON DELETE SET NULL"
+  },
+  {
+    "table_name": "pressings",
+    "type_element": "POLICY",
+    "nom": "Membre creation",
+    "definition": "INSERT roles={authenticated} using= check=is_organization_member(organization_id)"
+  },
+  {
+    "table_name": "pressings",
+    "type_element": "POLICY",
+    "nom": "Membre lecture",
+    "definition": "SELECT roles={authenticated} using=is_organization_member(organization_id) check="
+  },
+  {
+    "table_name": "pressings",
+    "type_element": "POLICY",
+    "nom": "Membre modification",
+    "definition": "UPDATE roles={authenticated} using=is_organization_member(organization_id) check=is_organization_member(organization_id)"
+  },
+  {
+    "table_name": "pressings",
+    "type_element": "POLICY",
+    "nom": "Membre suppression",
+    "definition": "DELETE roles={authenticated} using=is_organization_member(organization_id) check="
+  },
+  {
+    "table_name": "proprietaires",
+    "type_element": "COLUMN",
+    "nom": "actif",
+    "definition": "boolean NOT NULL DEFAULT true"
+  },
+  {
+    "table_name": "proprietaires",
+    "type_element": "COLUMN",
+    "nom": "adresse",
+    "definition": "text"
+  },
+  {
+    "table_name": "proprietaires",
+    "type_element": "COLUMN",
+    "nom": "code_postal",
+    "definition": "text"
+  },
+  {
+    "table_name": "proprietaires",
+    "type_element": "COLUMN",
+    "nom": "created_at",
+    "definition": "timestamp with time zone NOT NULL DEFAULT now()"
+  },
+  {
+    "table_name": "proprietaires",
+    "type_element": "COLUMN",
+    "nom": "email",
+    "definition": "text"
+  },
+  {
+    "table_name": "proprietaires",
+    "type_element": "COLUMN",
+    "nom": "id",
+    "definition": "uuid NOT NULL DEFAULT gen_random_uuid()"
+  },
+  {
+    "table_name": "proprietaires",
+    "type_element": "COLUMN",
+    "nom": "nom",
+    "definition": "text NOT NULL"
+  },
+  {
+    "table_name": "proprietaires",
+    "type_element": "COLUMN",
+    "nom": "observations",
+    "definition": "text"
+  },
+  {
+    "table_name": "proprietaires",
+    "type_element": "COLUMN",
+    "nom": "organization_id",
+    "definition": "uuid NOT NULL"
+  },
+  {
+    "table_name": "proprietaires",
+    "type_element": "COLUMN",
+    "nom": "prenom",
+    "definition": "text"
+  },
+  {
+    "table_name": "proprietaires",
+    "type_element": "COLUMN",
+    "nom": "statut",
+    "definition": "text NOT NULL DEFAULT 'Actif'::text"
+  },
+  {
+    "table_name": "proprietaires",
+    "type_element": "COLUMN",
+    "nom": "telephone",
+    "definition": "text"
+  },
+  {
+    "table_name": "proprietaires",
+    "type_element": "COLUMN",
+    "nom": "updated_at",
+    "definition": "timestamp with time zone NOT NULL DEFAULT now()"
+  },
+  {
+    "table_name": "proprietaires",
+    "type_element": "COLUMN",
+    "nom": "ville",
+    "definition": "text"
+  },
+  {
+    "table_name": "proprietaires",
+    "type_element": "CONSTRAINT",
+    "nom": "proprietaires_organization_id_fkey",
+    "definition": "FOREIGN KEY (organization_id) REFERENCES organizations(id) ON DELETE CASCADE"
+  },
+  {
+    "table_name": "proprietaires",
+    "type_element": "CONSTRAINT",
+    "nom": "proprietaires_pkey",
+    "definition": "PRIMARY KEY (id)"
+  },
+  {
+    "table_name": "proprietaires",
+    "type_element": "CONSTRAINT",
+    "nom": "proprietaires_statut_check",
+    "definition": "CHECK ((statut = ANY (ARRAY['Actif'::text, 'Prospect'::text, 'Inactif'::text])))"
+  },
+  {
+    "table_name": "proprietaires",
+    "type_element": "POLICY",
+    "nom": "Membre creation",
+    "definition": "INSERT roles={authenticated} using= check=is_organization_member(organization_id)"
+  },
+  {
+    "table_name": "proprietaires",
+    "type_element": "POLICY",
+    "nom": "Membre lecture",
+    "definition": "SELECT roles={authenticated} using=is_organization_member(organization_id) check="
+  },
+  {
+    "table_name": "proprietaires",
+    "type_element": "POLICY",
+    "nom": "Membre modification",
+    "definition": "UPDATE roles={authenticated} using=is_organization_member(organization_id) check=is_organization_member(organization_id)"
+  },
+  {
+    "table_name": "proprietaires",
+    "type_element": "POLICY",
+    "nom": "Membre suppression",
+    "definition": "DELETE roles={authenticated} using=is_organization_member(organization_id) check="
+  },
+  {
+    "table_name": "voyageurs",
+    "type_element": "COLUMN",
+    "nom": "adultes",
+    "definition": "integer NOT NULL DEFAULT 1"
+  },
+  {
+    "table_name": "voyageurs",
+    "type_element": "COLUMN",
+    "nom": "animaux",
+    "definition": "integer NOT NULL DEFAULT 0"
+  },
+  {
+    "table_name": "voyageurs",
+    "type_element": "COLUMN",
+    "nom": "arrivee",
+    "definition": "date"
+  },
+  {
+    "table_name": "voyageurs",
+    "type_element": "COLUMN",
+    "nom": "caution",
+    "definition": "boolean NOT NULL DEFAULT false"
+  },
+  {
+    "table_name": "voyageurs",
+    "type_element": "COLUMN",
+    "nom": "created_at",
+    "definition": "timestamp with time zone NOT NULL DEFAULT now()"
+  },
+  {
+    "table_name": "voyageurs",
+    "type_element": "COLUMN",
+    "nom": "depart",
+    "definition": "date"
+  },
+  {
+    "table_name": "voyageurs",
+    "type_element": "COLUMN",
+    "nom": "email",
+    "definition": "text"
+  },
+  {
+    "table_name": "voyageurs",
+    "type_element": "COLUMN",
+    "nom": "enfants",
+    "definition": "integer NOT NULL DEFAULT 0"
+  },
+  {
+    "table_name": "voyageurs",
+    "type_element": "COLUMN",
+    "nom": "heure_arrivee",
+    "definition": "time without time zone DEFAULT '16:00:00'::time without time zone"
+  },
+  {
+    "table_name": "voyageurs",
+    "type_element": "COLUMN",
+    "nom": "heure_depart",
+    "definition": "time without time zone DEFAULT '10:00:00'::time without time zone"
+  },
+  {
+    "table_name": "voyageurs",
+    "type_element": "COLUMN",
+    "nom": "id",
+    "definition": "uuid NOT NULL DEFAULT gen_random_uuid()"
+  },
+  {
+    "table_name": "voyageurs",
+    "type_element": "COLUMN",
+    "nom": "langue",
+    "definition": "text DEFAULT 'Français'::text"
+  },
+  {
+    "table_name": "voyageurs",
+    "type_element": "COLUMN",
+    "nom": "logement_id",
+    "definition": "uuid"
+  },
+  {
+    "table_name": "voyageurs",
+    "type_element": "COLUMN",
+    "nom": "nom",
+    "definition": "text NOT NULL"
+  },
+  {
+    "table_name": "voyageurs",
+    "type_element": "COLUMN",
+    "nom": "numero_reservation",
+    "definition": "text"
+  },
+  {
+    "table_name": "voyageurs",
+    "type_element": "COLUMN",
+    "nom": "observations",
+    "definition": "text"
+  },
+  {
+    "table_name": "voyageurs",
+    "type_element": "COLUMN",
+    "nom": "organization_id",
+    "definition": "uuid NOT NULL"
+  },
+  {
+    "table_name": "voyageurs",
+    "type_element": "COLUMN",
+    "nom": "plateforme",
+    "definition": "text NOT NULL DEFAULT 'Direct'::text"
+  },
+  {
+    "table_name": "voyageurs",
+    "type_element": "COLUMN",
+    "nom": "prenom",
+    "definition": "text"
+  },
+  {
+    "table_name": "voyageurs",
+    "type_element": "COLUMN",
+    "nom": "statut",
+    "definition": "text NOT NULL DEFAULT 'Réservation'::text"
+  },
+  {
+    "table_name": "voyageurs",
+    "type_element": "COLUMN",
+    "nom": "telephone",
+    "definition": "text"
+  },
+  {
+    "table_name": "voyageurs",
+    "type_element": "COLUMN",
+    "nom": "updated_at",
+    "definition": "timestamp with time zone NOT NULL DEFAULT now()"
+  },
+  {
+    "table_name": "voyageurs",
+    "type_element": "CONSTRAINT",
+    "nom": "voyageurs_adultes_check",
+    "definition": "CHECK ((adultes >= 0))"
+  },
+  {
+    "table_name": "voyageurs",
+    "type_element": "CONSTRAINT",
+    "nom": "voyageurs_animaux_check",
+    "definition": "CHECK ((animaux >= 0))"
+  },
+  {
+    "table_name": "voyageurs",
+    "type_element": "CONSTRAINT",
+    "nom": "voyageurs_dates_check",
+    "definition": "CHECK (((arrivee IS NULL) OR (depart IS NULL) OR (depart >= arrivee)))"
+  },
+  {
+    "table_name": "voyageurs",
+    "type_element": "CONSTRAINT",
+    "nom": "voyageurs_enfants_check",
+    "definition": "CHECK ((enfants >= 0))"
+  },
+  {
+    "table_name": "voyageurs",
+    "type_element": "CONSTRAINT",
+    "nom": "voyageurs_logement_id_fkey",
+    "definition": "FOREIGN KEY (logement_id) REFERENCES logements(id) ON DELETE SET NULL"
+  },
+  {
+    "table_name": "voyageurs",
+    "type_element": "CONSTRAINT",
+    "nom": "voyageurs_organization_id_fkey",
+    "definition": "FOREIGN KEY (organization_id) REFERENCES organizations(id) ON DELETE CASCADE"
+  },
+  {
+    "table_name": "voyageurs",
+    "type_element": "CONSTRAINT",
+    "nom": "voyageurs_pkey",
+    "definition": "PRIMARY KEY (id)"
+  },
+  {
+    "table_name": "voyageurs",
+    "type_element": "CONSTRAINT",
+    "nom": "voyageurs_statut_check",
+    "definition": "CHECK ((statut = ANY (ARRAY['Réservation'::text, 'Arrivé'::text, 'Parti'::text, 'Annulé'::text])))"
+  },
+  {
+    "table_name": "voyageurs",
+    "type_element": "POLICY",
+    "nom": "Membre creation",
+    "definition": "INSERT roles={authenticated} using= check=is_organization_member(organization_id)"
+  },
+  {
+    "table_name": "voyageurs",
+    "type_element": "POLICY",
+    "nom": "Membre lecture",
+    "definition": "SELECT roles={authenticated} using=is_organization_member(organization_id) check="
+  },
+  {
+    "table_name": "voyageurs",
+    "type_element": "POLICY",
+    "nom": "Membre modification",
+    "definition": "UPDATE roles={authenticated} using=is_organization_member(organization_id) check=is_organization_member(organization_id)"
+  },
+  {
+    "table_name": "voyageurs",
+    "type_element": "POLICY",
+    "nom": "Membre suppression",
+    "definition": "DELETE roles={authenticated} using=is_organization_member(organization_id) check="
+  }
+]

@@ -134,15 +134,12 @@ export default function AppShell({
   const pathname = usePathname();
   const router = useRouter();
 
-  const [menuMobileOuvert, setMenuMobileOuvert] =
-    useState(false);
+  const [routeMenu, setRouteMenu] = useState<string | null>(null);
+  const menuMobileOuvert = routeMenu === pathname;
+  function setMenuMobileOuvert(ouvert: boolean) { setRouteMenu(ouvert ? pathname : null); }
 
   const [deconnexionEnCours, setDeconnexionEnCours] =
     useState(false);
-
-  useEffect(() => {
-    setMenuMobileOuvert(false);
-  }, [pathname]);
 
   useEffect(() => {
     if (!menuMobileOuvert) {
