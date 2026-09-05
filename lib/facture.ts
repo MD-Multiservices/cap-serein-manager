@@ -36,7 +36,7 @@ export function resteAPayer(
       facture.remise
     );
 
-  return total - facture.acompte;
+  return Math.max(0, total - facture.acompte);
 }
 
 export function formaterPrix(
@@ -69,5 +69,5 @@ export function creerNumeroFacture(): string {
     maintenant.getMinutes()
   ).padStart(2, "0");
 
-  return `FAC-${annee}${mois}${jour}-${heure}${minute}`;
+  return `FAC-${annee}${mois}${jour}-${heure}${minute}-${crypto.randomUUID().slice(0, 8).toUpperCase()}`;
 }

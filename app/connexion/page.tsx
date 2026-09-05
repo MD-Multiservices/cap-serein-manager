@@ -36,19 +36,35 @@ export default function ConnexionPage() {
     setErreur("");
     setChargement(true);
 
-    const { error } = await supabase.auth.signInWithPassword({
-      email: email.trim(),
-      password: motDePasse,
-    });
-
-    if (error) {
-      setErreur("Adresse e-mail ou mot de passe incorrect.");
+    try {
+      const { error } = await supabase.auth.signInWithPassword({
+        email: email.trim(),
+        password: motDePasse,
+      });
+      if (error) {
+        const code = error.code || "";
+        if (code === "invalid_credentials") {
+          setErreur("Supabase refuse ces identifiants sur cette version du site (invalid_credentials). Vérifiez l’adresse e-mail et le mot de passe.");
+        } else if (code === "email_not_confirmed") {
+          setErreur("Votre adresse e-mail doit être confirmée avant la connexion.");
+        } else if (error.status === 429) {
+          setErreur("Trop de tentatives de connexion. Patientez quelques minutes avant de réessayer.");
+        } else if (error.name === "AuthRetryableFetchError" || !error.status) {
+          setErreur("Impossible de joindre Supabase. Vérifiez votre connexion réseau et réessayez.");
+        } else if (/api.?key/i.test(error.message) || error.status === 401 || error.status === 403) {
+          setErreur("La connexion est refusée par la configuration Supabase de cette version du site. Ce refus ne confirme pas un mauvais mot de passe.");
+        } else {
+          setErreur(`Connexion Supabase indisponible (HTTP ${error.status}${code ? `, ${code}` : ""}). Communiquez ce message pour le diagnostic.`);
+        }
+        return;
+      }
+      router.replace("/");
+      router.refresh();
+    } catch {
+      setErreur("Impossible de joindre le service de connexion. Vérifiez le réseau et réessayez.");
+    } finally {
       setChargement(false);
-      return;
     }
-
-    router.replace("/");
-    router.refresh();
   }
 
   if (verification) {
@@ -135,3 +151,4 @@ export default function ConnexionPage() {
     </main>
   );
 }
+

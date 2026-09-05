@@ -1,11 +1,11 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import { useMemo, useState } from "react";
 
 import PageHeader from "@/components/ui/PageHeader";
 import Section from "@/components/ui/Section";
 
-import { enregistrer, lire } from "@/lib/database";
+import { useRemoteCollection } from "@/lib/useRemoteCollection";
 import {
   creerNumeroFacture,
   formaterPrix,
@@ -52,6 +52,7 @@ const statutsFacture: StatutFacture[] = [
   "Brouillon",
   "Envoyée",
   "Payée",
+  "Partiellement payée",
   "En retard",
   "Annulée",
 ];
@@ -134,16 +135,17 @@ function totalDocument(facture: Facture): number {
 }
 
 export default function FacturationPage() {
-  const [factures, setFactures] = useState<Facture[]>([]);
-  const [proprietaires, setProprietaires] = useState<Proprietaire[]>([]);
-  const [logements, setLogements] = useState<Logement[]>([]);
-  const [voyageurs, setVoyageurs] = useState<Voyageur[]>([]);
+  const remote = useRemoteCollection<Facture>("factures");
+  const factures = remote.items;
+  const proprietaires = (remote.references.proprietaires || []) as unknown as Proprietaire[];
+  const logements = (remote.references.logements || []) as unknown as Logement[];
+  const voyageurs = (remote.references.voyageurs || []) as unknown as Voyageur[];
 
   const [factureEnCours, setFactureEnCours] =
     useState<Facture>(creerFactureVide());
 
   const [formulaireOuvert, setFormulaireOuvert] = useState(false);
-  const [donneesChargees, setDonneesChargees] = useState(false);
+  const donneesChargees = !remote.loading;
   const [erreur, setErreur] = useState("");
 
   const [recherche, setRecherche] = useState("");
@@ -151,30 +153,9 @@ export default function FacturationPage() {
   const [filtreStatut, setFiltreStatut] =
     useState<FiltreStatut>("Tous");
 
-  useEffect(() => {
-    const facturesEnregistrees = lire<Facture>("factures").map(
-      (facture) => ({
-        ...facture,
-        lignes: Array.isArray(facture.lignes)
-          ? facture.lignes
-          : [],
-        remise: Number(facture.remise || 0),
-        acompte: Number(facture.acompte || 0),
-      })
-    );
+  
 
-    setFactures(facturesEnregistrees);
-    setProprietaires(lire<Proprietaire>("proprietaires"));
-    setLogements(lire<Logement>("logements"));
-    setVoyageurs(lire<Voyageur>("voyageurs"));
-    setDonneesChargees(true);
-  }, []);
-
-  useEffect(() => {
-    if (!donneesChargees) return;
-
-    enregistrer("factures", factures);
-  }, [factures, donneesChargees]);
+  
 
   const statistiques = useMemo(() => {
     const maintenant = new Date();
@@ -197,6 +178,7 @@ export default function FacturationPage() {
     const aEncaisser = factures.filter(
       (facture) =>
         facture.statut === "Envoyée" ||
+        facture.statut === "Partiellement payée" ||
         facture.statut === "En retard"
     );
 
@@ -382,7 +364,7 @@ export default function FacturationPage() {
     });
   }
 
-  function enregistrerFacture() {
+  async function enregistrerFacture() {
     if (!factureEnCours.numero.trim()) {
       setErreur("Le numéro du document est obligatoire.");
       return;
@@ -424,7 +406,7 @@ export default function FacturationPage() {
 
     const maintenant = new Date().toISOString();
 
-    setFactures((liste) => {
+    if (!(await remote.change((liste) => {
       const existe = liste.some(
         (facture) => facture.id === factureEnCours.id
       );
@@ -461,30 +443,29 @@ export default function FacturationPage() {
       }
 
       return [factureFinale, ...liste];
-    });
+    }))) return;
 
     fermerFormulaire();
   }
 
-  function supprimerFacture(facture: Facture) {
+  async function supprimerFacture(facture: Facture) {
     const confirmation = window.confirm(
       `Supprimer définitivement ${facture.type.toLowerCase()} ${facture.numero} ?`
     );
 
     if (!confirmation) return;
 
-    setFactures((liste) =>
-      liste.filter((item) => item.id !== facture.id)
-    );
+    if (!(await remote.change((liste) =>
+      liste.filter((item) => item.id !== facture.id)))) return;
   }
 
-  function changerStatut(
+  async function changerStatut(
     id: string,
     statut: StatutFacture
   ) {
     const maintenant = new Date().toISOString();
 
-    setFactures((liste) =>
+    if (!(await remote.change((liste) =>
       liste.map((facture) =>
         facture.id === id
           ? {
@@ -493,8 +474,7 @@ export default function FacturationPage() {
               updatedAt: maintenant,
             }
           : facture
-      )
-    );
+      )))) return;
   }
 
   function reinitialiserFiltres() {
@@ -517,7 +497,7 @@ export default function FacturationPage() {
   );
 
   return (
-    <div className="space-y-8">
+    <fieldset disabled={remote.busy || remote.loading} className="min-w-0">{remote.error && <p role="alert" className="mb-4 rounded-xl bg-red-50 p-4 text-red-700">{remote.error}</p>}{remote.busy && <p role="status">Enregistrement en cours…</p>}<div className="space-y-8">
       <PageHeader
         titre="Facturation"
         description="Créez et suivez vos devis, factures, acomptes, règlements et échéances."
@@ -1097,7 +1077,7 @@ export default function FacturationPage() {
           />
         )}
       </Section>
-    </div>
+    </div></fieldset>
   );
 }
 
@@ -1122,6 +1102,7 @@ function CarteFacture({
     Brouillon: "bg-slate-100 text-slate-700",
     Envoyée: "bg-blue-100 text-blue-700",
     Payée: "bg-emerald-100 text-emerald-700",
+    "Partiellement payée": "bg-cyan-100 text-cyan-700",
     "En retard": "bg-red-100 text-red-700",
     Annulée: "bg-slate-200 text-slate-500",
   };

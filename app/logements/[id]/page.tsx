@@ -1,6 +1,8 @@
 "use client";
 
 import Link from "next/link";
+import { supabase } from "@/lib/supabase";
+import { obtenirOrganisationCourante, messageErreurSupabase } from "@/lib/organization";
 import { useParams } from "next/navigation";
 import { useEffect, useState } from "react";
 
@@ -24,12 +26,48 @@ export default function FicheLogementPage() {
   const params = useParams();
   const [logement, setLogement] = useState<Logement | null>(null);
 
+  const [chargement, setChargement] = useState(true);
+  const [erreur, setErreur] = useState("");
+
   useEffect(() => {
-    const sauvegarde = localStorage.getItem("cap-serein-logements");
-    const logements: Logement[] = sauvegarde ? JSON.parse(sauvegarde) : [];
-    const trouve = logements.find((item) => item.id === params.id);
-    setLogement(trouve || null);
+    let actif = true;
+    async function charger() {
+      setChargement(true);
+      setErreur("");
+      setLogement(null);
+      try {
+        const org = await obtenirOrganisationCourante();
+        const { data, error } = await supabase.from("logements")
+          .select("id,nom,adresse,ville,code_postal,proprietaire_id,wifi_ssid,wifi_mot_de_passe,boite_cles,code_boite_cles,observations")
+          .eq("organization_id", org).eq("id", String(params.id)).maybeSingle();
+        if (error) throw error;
+        if (!data) return;
+        let proprietaire = { nom: "", telephone: "", email: "" };
+        if (data.proprietaire_id) {
+          const resultat = await supabase.from("proprietaires").select("nom,telephone,email")
+            .eq("organization_id", org).eq("id", data.proprietaire_id).maybeSingle();
+          if (resultat.error) throw resultat.error;
+          if (resultat.data) proprietaire = resultat.data;
+        }
+        if (actif) setLogement({
+          id: data.id, nom: data.nom || "", adresse: data.adresse || "", ville: data.ville || "",
+          codePostal: data.code_postal || "", proprietaire: proprietaire.nom || "",
+          telephone: proprietaire.telephone || "", email: proprietaire.email || "",
+          wifi: data.wifi_ssid || "", motDePasseWifi: data.wifi_mot_de_passe || "",
+          boiteCles: data.boite_cles || "", codeBoiteCles: data.code_boite_cles || "", observations: data.observations || "",
+        });
+      } catch (cause) {
+        if (actif) setErreur(messageErreurSupabase(cause));
+      } finally {
+        if (actif) setChargement(false);
+      }
+    }
+    void charger();
+    return () => { actif = false; };
   }, [params.id]);
+
+  if (chargement) return <p role="status">Chargement du logement…</p>;
+  if (erreur) return <div role="alert"><p>{erreur}</p><Link href="/logements">Retour aux logements</Link></div>;
 
   if (!logement) {
     return (

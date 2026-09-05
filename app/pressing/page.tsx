@@ -1,11 +1,11 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import { useMemo, useState } from "react";
 import type { ReactNode } from "react";
 
 import PageHeader from "@/components/ui/PageHeader";
 import Section from "@/components/ui/Section";
-import { enregistrer, lire } from "@/lib/database";
+import { useRemoteCollection } from "@/lib/useRemoteCollection";
 
 type TypePressing =
   | "Collecte du linge"
@@ -17,7 +17,6 @@ type TypePressing =
 
 type StatutPressing =
   | "À planifier"
-  | "Collecte prévue"
   | "En traitement"
   | "Prêt"
   | "Livré"
@@ -86,7 +85,6 @@ const typesPressing: TypePressing[] = [
 
 const statutsPressing: StatutPressing[] = [
   "À planifier",
-  "Collecte prévue",
   "En traitement",
   "Prêt",
   "Livré",
@@ -203,7 +201,7 @@ function normaliserStatut(valeur: unknown): StatutPressing {
     statutNormalise.includes("prevu") ||
     statutNormalise.includes("planifie")
   ) {
-    return "Collecte prévue";
+    return "À planifier";
   }
 
   if (
@@ -231,74 +229,8 @@ function normaliserStatut(valeur: unknown): StatutPressing {
   return "À planifier";
 }
 
-function normaliserPressing(
-  item: AncienPressing
-): Pressing {
-  const maintenant = new Date().toISOString();
 
-  return {
-    ...creerPressingVide(),
-    ...item,
-    id: item.id || creerIdentifiant(),
-    logementId:
-      item.logementId || item.logement || "",
-    voyageurId:
-      item.voyageurId || item.voyageur || "",
-    type: normaliserType(item.type || item.linge),
-    dateCollecte:
-      item.dateCollecte || item.date || "",
-    heureCollecte:
-      item.heureCollecte || item.heure || "10:00",
-    dateRetour:
-      item.dateRetour || item.retour || "",
-    heureRetour:
-      item.heureRetour ||
-      item.heureLivraison ||
-      "16:00",
-    statut: normaliserStatut(item.statut),
-    prestataire:
-      item.prestataire || item.personne || "",
-    nombreSacs: Math.max(
-      1,
-      Number(item.nombreSacs || item.sacs || 1)
-    ),
-    draps: Math.max(0, Number(item.draps || 0)),
-    serviettes: Math.max(
-      0,
-      Number(item.serviettes || 0)
-    ),
-    autresArticles: item.autresArticles || "",
-    cout: Math.max(
-      0,
-      Number(item.cout || item.prix || 0)
-    ),
-    paiementEffectue: Boolean(
-      item.paiementEffectue || item.paye
-    ),
-    notes:
-      item.notes || item.observations || "",
-    createdAt: item.createdAt || maintenant,
-    updatedAt: item.updatedAt || maintenant,
-  };
-}
 
-function lireAnciennesDonnees(): AncienPressing[] {
-  if (typeof window === "undefined") return [];
-
-  try {
-    const contenu = window.localStorage.getItem(
-      "cap-serein-pressing"
-    );
-
-    if (!contenu) return [];
-
-    const donnees = JSON.parse(contenu);
-
-    return Array.isArray(donnees) ? donnees : [];
-  } catch {
-    return [];
-  }
-}
 
 function formaterPrix(montant: number): string {
   return new Intl.NumberFormat("fr-FR", {
@@ -308,17 +240,12 @@ function formaterPrix(montant: number): string {
 }
 
 export default function PressingPage() {
-  const [pressings, setPressings] = useState<Pressing[]>(
-    []
-  );
+  const remote = useRemoteCollection<Pressing>("pressings");
+  const pressings = remote.items;
 
-  const [logements, setLogements] = useState<
-    Logement[]
-  >([]);
+  const logements = (remote.references.logements || []) as unknown as Logement[];
 
-  const [voyageurs, setVoyageurs] = useState<
-    Voyageur[]
-  >([]);
+  const voyageurs = (remote.references.voyageurs || []) as unknown as Voyageur[];
 
   const [pressingEnCours, setPressingEnCours] =
     useState<Pressing>(creerPressingVide());
@@ -326,8 +253,7 @@ export default function PressingPage() {
   const [formulaireOuvert, setFormulaireOuvert] =
     useState(false);
 
-  const [donneesChargees, setDonneesChargees] =
-    useState(false);
+  const donneesChargees = !remote.loading;
 
   const [erreur, setErreur] = useState("");
   const [recherche, setRecherche] = useState("");
@@ -341,35 +267,9 @@ export default function PressingPage() {
   const [filtreLogement, setFiltreLogement] =
     useState("Tous");
 
-  useEffect(() => {
-    const donneesActuelles =
-      lire<AncienPressing>("pressings");
+  
 
-    const anciennesDonnees = lireAnciennesDonnees();
-
-    const donneesFusionnees = [
-      ...donneesActuelles,
-      ...anciennesDonnees,
-    ]
-      .map(normaliserPressing)
-      .filter(
-        (pressing, index, liste) =>
-          liste.findIndex(
-            (item) => item.id === pressing.id
-          ) === index
-      );
-
-    setPressings(donneesFusionnees);
-    setLogements(lire<Logement>("logements"));
-    setVoyageurs(lire<Voyageur>("voyageurs"));
-    setDonneesChargees(true);
-  }, []);
-
-  useEffect(() => {
-    if (!donneesChargees) return;
-
-    enregistrer("pressings", pressings);
-  }, [pressings, donneesChargees]);
+  
 
   const statistiques = useMemo(() => {
     const aujourdHui = dateLocaleISO();
@@ -406,7 +306,7 @@ export default function PressingPage() {
 
       enTraitement: pressings.filter(
         (pressing) =>
-          pressing.statut === "Collecte prévue" ||
+          pressing.statut === "À planifier" ||
           pressing.statut === "En traitement"
       ).length,
 
@@ -553,7 +453,7 @@ export default function PressingPage() {
     setFormulaireOuvert(false);
   }
 
-  function sauvegarderPressing() {
+  async function sauvegarderPressing() {
     if (!pressingEnCours.logementId) {
       setErreur("Le logement est obligatoire.");
       return;
@@ -593,7 +493,7 @@ export default function PressingPage() {
 
     const maintenant = new Date().toISOString();
 
-    setPressings((liste) => {
+    if (!(await remote.change((liste) => {
       const existe = liste.some(
         (pressing) =>
           pressing.id === pressingEnCours.id
@@ -645,32 +545,31 @@ export default function PressingPage() {
       }
 
       return [pressingFinal, ...liste];
-    });
+    }))) return;
 
     fermerFormulaire();
   }
 
-  function supprimerPressing(pressing: Pressing) {
+  async function supprimerPressing(pressing: Pressing) {
     const confirmation = window.confirm(
       `Supprimer définitivement cette prestation prévue le ${pressing.dateCollecte} ?`
     );
 
     if (!confirmation) return;
 
-    setPressings((liste) =>
+    if (!(await remote.change((liste) =>
       liste.filter(
         (item) => item.id !== pressing.id
-      )
-    );
+      )))) return;
   }
 
-  function changerStatut(
+  async function changerStatut(
     id: string,
     statut: StatutPressing
   ) {
     const maintenant = new Date().toISOString();
 
-    setPressings((liste) =>
+    if (!(await remote.change((liste) =>
       liste.map((pressing) =>
         pressing.id === id
           ? {
@@ -679,17 +578,16 @@ export default function PressingPage() {
               updatedAt: maintenant,
             }
           : pressing
-      )
-    );
+      )))) return;
   }
 
-  function changerPaiement(
+  async function changerPaiement(
     id: string,
     paiementEffectue: boolean
   ) {
     const maintenant = new Date().toISOString();
 
-    setPressings((liste) =>
+    if (!(await remote.change((liste) =>
       liste.map((pressing) =>
         pressing.id === id
           ? {
@@ -698,8 +596,7 @@ export default function PressingPage() {
               updatedAt: maintenant,
             }
           : pressing
-      )
-    );
+      )))) return;
   }
 
   function reinitialiserFiltres() {
@@ -716,7 +613,7 @@ export default function PressingPage() {
     filtreLogement !== "Tous";
 
   return (
-    <div className="space-y-8">
+    <fieldset disabled={remote.busy || remote.loading} className="min-w-0">{remote.error && <p role="alert" className="mb-4 rounded-xl bg-red-50 p-4 text-red-700">{remote.error}</p>}{remote.busy && <p role="status">Enregistrement en cours…</p>}<div className="space-y-8">
       <PageHeader
         titre="Pressing"
         description="Suivez les collectes, le traitement, les retours de linge, les prestataires et les paiements."
@@ -1271,7 +1168,7 @@ export default function PressingPage() {
           />
         )}
       </Section>
-    </div>
+    </div></fieldset>
   );
 }
 
@@ -1300,8 +1197,6 @@ function CartePressing({
   > = {
     "À planifier":
       "bg-orange-100 text-orange-700",
-    "Collecte prévue":
-      "bg-blue-100 text-blue-700",
     "En traitement":
       "bg-violet-100 text-violet-700",
     Prêt: "bg-cyan-100 text-cyan-700",

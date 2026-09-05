@@ -5,7 +5,6 @@ import { useEffect, useMemo, useState } from "react";
 
 import PageHeader from "@/components/ui/PageHeader";
 import Section from "@/components/ui/Section";
-import { enregistrer, lire } from "@/lib/database";
 import { supabase } from "@/lib/supabase";
 
 type TypeEtatDesLieux = "entree" | "sortie";
@@ -99,19 +98,7 @@ const statuts: { valeur: StatutEtatDesLieux; label: string }[] = [
   { valeur: "signe", label: "Signé" },
 ];
 
-function creerIdentifiant(): string {
-  if (typeof crypto !== "undefined" && typeof crypto.randomUUID === "function") {
-    return crypto.randomUUID();
-  }
 
-  return `edl-${Date.now()}-${Math.random().toString(36).slice(2, 10)}`;
-}
-
-function estUuid(valeur: string): boolean {
-  return /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(
-    valeur
-  );
-}
 
 function dateAujourdhui(): string {
   const maintenant = new Date();
@@ -324,110 +311,6 @@ export default function EtatsDesLieuxPage() {
     "tous"
   );
 
-  useEffect(() => {
-    let actif = true;
-
-    async function initialiser() {
-      setDonneesChargees(false);
-      setErreurPage("");
-
-      try {
-        const {
-          data: { user },
-          error: erreurUtilisateur,
-        } = await supabase.auth.getUser();
-
-        if (erreurUtilisateur || !user) {
-          throw new Error("Votre session Supabase n’est pas disponible.");
-        }
-
-        const { data: adhesion, error: erreurAdhesion } = await supabase
-          .from("organization_members")
-          .select("organization_id")
-          .eq("user_id", user.id)
-          .limit(1)
-          .maybeSingle();
-
-        if (erreurAdhesion) throw erreurAdhesion;
-
-        if (!adhesion?.organization_id) {
-          throw new Error("Aucune organisation Cap Serein n’est associée à votre compte.");
-        }
-
-        if (!actif) return;
-
-        const orgId = String(adhesion.organization_id);
-        setOrganizationId(orgId);
-
-        const [logementsDistants, voyageursDistants] = await Promise.all([
-          chargerLogements(orgId),
-          chargerVoyageurs(orgId),
-        ]);
-
-        if (!actif) return;
-
-        setLogements(logementsDistants);
-        setVoyageurs(voyageursDistants);
-
-        const migration = await chargerEtatsDesLieux(
-          orgId,
-          logementsDistants,
-          voyageursDistants,
-          true
-        );
-
-        if (actif && migration) {
-          setMessage(
-            "Vos anciens états des lieux présents sur cet ordinateur ont été importés dans Supabase."
-          );
-        }
-      } catch (error) {
-        console.error(error);
-        if (actif) {
-          setErreurPage(
-            error instanceof Error
-              ? error.message
-              : "Impossible de charger les états des lieux."
-          );
-        }
-      } finally {
-        if (actif) setDonneesChargees(true);
-      }
-    }
-
-    void initialiser();
-
-    return () => {
-      actif = false;
-    };
-  }, []);
-
-  useEffect(() => {
-    if (!donneesChargees) return;
-
-    const anciens = lire<Record<string, unknown>>("etatsDesLieux");
-
-    const fusion = etatsDesLieux.map((etat) => {
-      const ancien = anciens.find(
-        (element) =>
-          texte(element.id) === etat.id ||
-          texte(element.missionId) === etat.id ||
-          texte(element.id) === etat.missionId ||
-          texte(element.missionId) === etat.missionId
-      );
-
-      if (!ancien) return etat;
-
-      return {
-        ...ancien,
-        ...etat,
-        missionId: texte(ancien.missionId) || etat.missionId || etat.id,
-      };
-    });
-
-    enregistrer("etatsDesLieux", fusion);
-  }, [etatsDesLieux, donneesChargees]);
-
   async function chargerLogements(orgId: string): Promise<Logement[]> {
     const { data, error } = await supabase
       .from("logements")
@@ -519,28 +402,6 @@ export default function EtatsDesLieuxPage() {
 
     const lignes = (data || []) as LigneEtatDesLieux[];
 
-    if (autoriserMigration && lignes.length === 0) {
-      const locaux = lire<Record<string, unknown>>("etatsDesLieux");
-
-      if (locaux.length > 0) {
-        await importerEtatsLocaux(
-          orgId,
-          locaux,
-          logementsDistants,
-          voyageursDistants
-        );
-
-        await chargerEtatsDesLieux(
-          orgId,
-          logementsDistants,
-          voyageursDistants,
-          false
-        );
-
-        return true;
-      }
-    }
-
     setEtatsDesLieux(
       lignes.map((ligne) =>
         convertirEtatSupabase(ligne, logementsDistants, voyageursDistants)
@@ -550,126 +411,90 @@ export default function EtatsDesLieuxPage() {
     return false;
   }
 
-  function trouverLogement(
-    brut: Record<string, unknown>,
-    logementsDistants: Logement[]
-  ): Logement | null {
-    const id = texte(brut.logementId);
-    const direct = logementsDistants.find((element) => element.id === id);
-    if (direct) return direct;
+  useEffect(() => {
+    let actif = true;
 
-    const nom = normaliserTexte(texte(brut.logementNom || brut.nomLogement));
-    if (!nom) return null;
+    async function initialiser() {
+      setDonneesChargees(false);
+      setErreurPage("");
 
-    const correspondances = logementsDistants.filter(
-      (element) => normaliserTexte(element.nom) === nom
-    );
-
-    return correspondances.length === 1 ? correspondances[0] : null;
-  }
-
-  function trouverVoyageur(
-    brut: Record<string, unknown>,
-    voyageursDistants: Voyageur[]
-  ): Voyageur | null {
-    const id = texte(brut.voyageurId);
-    const direct = voyageursDistants.find((element) => element.id === id);
-    if (direct) return direct;
-
-    const email = normaliserTexte(texte(brut.voyageurEmail));
-    if (email) {
-      const parEmail = voyageursDistants.find(
-        (element) => normaliserTexte(element.email) === email
-      );
-      if (parEmail) return parEmail;
-    }
-
-    const nom = normaliserTexte(texte(brut.voyageurNom || brut.nomVoyageur));
-    if (!nom) return null;
-
-    const correspondances = voyageursDistants.filter(
-      (element) => normaliserTexte(nomCompletVoyageur(element)) === nom
-    );
-
-    return correspondances.length === 1 ? correspondances[0] : null;
-  }
-
-  async function importerEtatsLocaux(
-    orgId: string,
-    locaux: Record<string, unknown>[],
-    logementsDistants: Logement[],
-    voyageursDistants: Voyageur[]
-  ) {
-    for (const brut of locaux) {
-      const logement = trouverLogement(brut, logementsDistants);
-      if (!logement) continue;
-
-      const voyageur = trouverVoyageur(brut, voyageursDistants);
-      const date =
-        texte(brut.date || brut.datePrevue || brut.dateIntervention) ||
-        dateAujourdhui();
-      const heure = texte(brut.heure || brut.heurePrevue) || "10:00";
-
-      let datePrevue: string | null = null;
       try {
-        datePrevue = new Date(`${date}T${heure}:00`).toISOString();
-      } catch {
-        datePrevue = null;
+        const {
+          data: { user },
+          error: erreurUtilisateur,
+        } = await supabase.auth.getUser();
+
+        if (erreurUtilisateur || !user) {
+          throw new Error("Votre session Supabase n’est pas disponible.");
+        }
+
+        const { data: adhesion, error: erreurAdhesion } = await supabase
+          .from("organization_members")
+          .select("organization_id")
+          .eq("user_id", user.id)
+          .limit(1)
+          .maybeSingle();
+
+        if (erreurAdhesion) throw erreurAdhesion;
+
+        if (!adhesion?.organization_id) {
+          throw new Error("Aucune organisation Cap Serein n’est associée à votre compte.");
+        }
+
+        if (!actif) return;
+
+        const orgId = String(adhesion.organization_id);
+        setOrganizationId(orgId);
+
+        const [logementsDistants, voyageursDistants] = await Promise.all([
+          chargerLogements(orgId),
+          chargerVoyageurs(orgId),
+        ]);
+
+        if (!actif) return;
+
+        const query = new URLSearchParams(window.location.search);
+        if (query.get("nouveau") === "1") {
+          setFormulaire({ ...creerFormulaireVide(), logementId: query.get("logement") || "" });
+          setFormulaireOuvert(true);
+        }
+        setLogements(logementsDistants);
+        setVoyageurs(voyageursDistants);
+
+        const migration = await chargerEtatsDesLieux(
+          orgId,
+          logementsDistants,
+          voyageursDistants,
+          true
+        );
+
+        if (actif && migration) {
+          setMessage(
+            "Vos anciens états des lieux présents sur cet ordinateur ont été importés dans Supabase."
+          );
+        }
+      } catch (error) {
+        console.error(error);
+        if (actif) {
+          setErreurPage(
+            error instanceof Error
+              ? error.message
+              : "Impossible de charger les états des lieux."
+          );
+        }
+      } finally {
+        if (actif) setDonneesChargees(true);
       }
-
-      const logementSnapshot = {
-        id: logement.id,
-        nom: logement.nom,
-        typeLogement: logement.typeLogement,
-        superficie: logement.superficie,
-        nombreChambres: logement.nombreChambres,
-        adresse: logement.adresse,
-        codePostal: logement.codePostal,
-        ville: logement.ville,
-        adresseComplete: adresseComplete(logement),
-      };
-
-      const voyageurSnapshot = voyageur
-        ? {
-            id: voyageur.id,
-            nom: voyageur.nom,
-            prenom: voyageur.prenom,
-            nomComplet: nomCompletVoyageur(voyageur),
-            telephone: voyageur.telephone,
-            email: voyageur.email,
-          }
-        : null;
-
-      const payload: Record<string, unknown> = {
-        organization_id: orgId,
-        logement_id: logement.id,
-        voyageur_id: voyageur?.id || null,
-        mission_id: null,
-        type_edl: normaliserType(brut.type || brut.typeEtatDesLieux),
-        statut: normaliserStatut(brut.statut),
-        date_prevue: datePrevue,
-        notes_preparation:
-          texte(brut.notesPreparation) || texte(brut.observations) || null,
-        etat_general: texte(brut.etatGeneral) || null,
-        proprete: texte(brut.proprete) || null,
-        observations_generales: texte(brut.observationsGenerales) || null,
-        logement_snapshot: logementSnapshot,
-        voyageur_snapshot: voyageurSnapshot,
-      };
-
-      const ancienId = texte(brut.id);
-      if (ancienId && estUuid(ancienId)) payload.id = ancienId;
-
-      const dateCreation = texte(brut.dateCreation || brut.createdAt);
-      if (dateCreation) payload.created_at = dateCreation;
-
-      const dateModification = texte(brut.dateModification || brut.updatedAt);
-      if (dateModification) payload.updated_at = dateModification;
-
-      const { error } = await supabase.from("etats_des_lieux").insert(payload);
-      if (error) throw error;
     }
-  }
+
+    void initialiser();
+
+    return () => {
+      actif = false;
+    };
+  }, []);
+
+
 
   const statistiques = useMemo(
     () => ({

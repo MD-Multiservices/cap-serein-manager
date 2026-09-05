@@ -6,7 +6,9 @@
     "dev": "next dev",
     "build": "next build",
     "start": "next start",
-    "lint": "eslint"
+    "lint": "eslint",
+    "test:supabase": "node tests/supabase-migration.cjs",
+    "test:persistence": "node scripts/check-persistence.cjs"
   },
   "dependencies": {
     "@supabase/supabase-js": "^2.114.0",
@@ -16,6 +18,7 @@
     "react-dom": "19.2.4"
   },
   "devDependencies": {
+    "@electric-sql/pglite": "^0.5.8",
     "@tailwindcss/postcss": "^4",
     "@types/node": "^20",
     "@types/react": "^19",
