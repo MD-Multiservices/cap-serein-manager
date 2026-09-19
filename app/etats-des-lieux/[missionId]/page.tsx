@@ -7,6 +7,7 @@ import {
   ReactNode,
   useEffect,
   useMemo,
+  useRef,
   useState,
 } from "react";
 
@@ -1541,16 +1542,20 @@ export default function FicheEtatDesLieuxPage() {
     };
   }, [missionId]);
 
-  async function enregistrerModifications() {
+  const verrouSauvegarde = useRef(false);
+
+  async function enregistrerModifications(version = etat): Promise<boolean> {
+    const etat = version;
     if (
       !etat ||
       !organizationId ||
       !synchronisationActive ||
-      sauvegardeEnCours
+      verrouSauvegarde.current
     ) {
-      return;
+      return false;
     }
 
+    verrouSauvegarde.current = true;
     setSauvegardeEnCours(true);
     setErreurSauvegarde("");
     setMessageSauvegarde("");
@@ -1730,19 +1735,6 @@ export default function FicheEtatDesLieuxPage() {
       ];
 
       await Promise.all([
-        sauvegarderEnteteEdl(
-          organizationId,
-          etat.id,
-          {
-            statut: etat.statut,
-            notesPreparation: etat.notesPreparation,
-            etatGeneral: etat.etatGeneral,
-            proprete: etat.proprete,
-            observationsGenerales: etat.observationsGenerales,
-            dateDebut: etat.dateDebut,
-            dateFin: etat.dateFin,
-          }
-        ),
         sauvegarderZonesEdl(
           organizationId,
           etat.id,
@@ -1809,6 +1801,21 @@ export default function FicheEtatDesLieuxPage() {
         )
       );
 
+      // Confirmer le statut seulement après les données de la fiche.
+      await sauvegarderEnteteEdl(
+          organizationId,
+          etat.id,
+          {
+            statut: etat.statut,
+            notesPreparation: etat.notesPreparation,
+            etatGeneral: etat.etatGeneral,
+            proprete: etat.proprete,
+            observationsGenerales: etat.observationsGenerales,
+            dateDebut: etat.dateDebut,
+            dateFin: etat.dateFin,
+          }
+        );
+
       const versionSauvegardee = {
         ...etat,
         validation: validationSauvegardee,
@@ -1826,7 +1833,8 @@ export default function FicheEtatDesLieuxPage() {
       );
 
       setErreurSauvegarde("");
-      setMessageSauvegarde("✓ Enregistré dans Supabase");
+      setMessageSauvegarde("✓ Enregistré");
+      return true;
     } catch (erreur) {
       setMessageSauvegarde("");
       setErreurSauvegarde(
@@ -1834,7 +1842,9 @@ export default function FicheEtatDesLieuxPage() {
           erreur
         )}`
       );
+      return false;
     } finally {
+      verrouSauvegarde.current = false;
       setSauvegardeEnCours(false);
     }
   }
@@ -1906,7 +1916,7 @@ export default function FicheEtatDesLieuxPage() {
     );
   }
 
-  function changerStatut(
+  async function changerStatut(
     statut: StatutEtatDesLieux
   ) {
     if (!etat) return;
@@ -1943,7 +1953,7 @@ export default function FicheEtatDesLieuxPage() {
         maintenant;
     }
 
-    modifierEtat(modification);
+    return enregistrerModifications({ ...etat, ...modification });
   }
 
   function validerEtSigner() {
@@ -2003,18 +2013,16 @@ export default function FicheEtatDesLieuxPage() {
     changerStatut("signe");
   }
 
-  function actionPrincipale() {
+  async function actionPrincipale() {
     if (!etat) return;
 
     if (etat.statut === "a_preparer") {
-      changerStatut("en_cours");
-      setEtapeActive("compteurs");
+      if (await changerStatut("en_cours")) setEtapeActive("compteurs");
       return;
     }
 
     if (etat.statut === "en_cours") {
-      changerStatut("termine");
-      setEtapeActive("validation");
+      if (await changerStatut("termine")) setEtapeActive("validation");
       return;
     }
 
@@ -2495,11 +2503,11 @@ export default function FicheEtatDesLieuxPage() {
             type="button"
             onClick={actionPrincipale}
             disabled={
-              etat.statut === "signe"
+              sauvegardeEnCours || traitementPhoto || !synchronisationActive || etat.statut === "signe"
             }
             className="min-h-14 w-full rounded-2xl bg-blue-600 px-6 py-3 font-black text-white shadow-lg shadow-blue-600/25 transition hover:bg-blue-700 disabled:cursor-not-allowed disabled:bg-violet-600 xl:w-auto"
           >
-            {texteAction}
+            {sauvegardeEnCours ? "Enregistrement..." : texteAction}
           </button>
         </div>
       </div>
@@ -3172,6 +3180,7 @@ export default function FicheEtatDesLieuxPage() {
                       "en_cours"
                     )
                   }
+                  disabled={sauvegardeEnCours || traitementPhoto || !synchronisationActive}
                   className="min-h-14 rounded-2xl bg-amber-500 px-6 py-3 font-black text-white shadow-lg"
                 >
                   ▶ Démarrer
@@ -3187,6 +3196,7 @@ export default function FicheEtatDesLieuxPage() {
                       "termine"
                     )
                   }
+                  disabled={sauvegardeEnCours || traitementPhoto || !synchronisationActive}
                   className="min-h-14 rounded-2xl bg-emerald-600 px-6 py-3 font-black text-white shadow-lg"
                 >
                   ✓ Terminer
@@ -3200,7 +3210,7 @@ export default function FicheEtatDesLieuxPage() {
                   onClick={
                     validerEtSigner
                   }
-                  disabled={!peutSigner}
+                  disabled={!peutSigner || sauvegardeEnCours || traitementPhoto || !synchronisationActive}
                   className="min-h-14 rounded-2xl bg-violet-600 px-6 py-3 font-black text-white shadow-lg disabled:cursor-not-allowed disabled:bg-slate-300"
                 >
                   ✍ Valider et signer
